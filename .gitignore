@@ -21,8 +21,11 @@ __pycache__/
 # RAG 벡터 DB 로컬 저장소
 ai_server/chroma_db/
 
-# (선택) 만약 docs 폴더 안에 용량이 큰 원본 PDF나 학교 데이터가 있다면 주석을 풀고 추가하세요.
+# docs 폴더 안에 용량이 큰 원본 PDF나 학교 데이터
 ai_server/docs/
+
+# 크롤링 결과물 폴더 전체
+ai_server/crawler/data/
 
 # =========================
 # 4. 자바 스프링 & 빌드 (main_server)
