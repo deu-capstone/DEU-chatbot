@@ -1,0 +1,39 @@
+# =========================
+# 1. 보안 및 환경변수
+# =========================
+**/.env
+
+# =========================
+# 2. 인텔리제이 (IDE) 관련 파일
+# =========================
+.idea/
+*.iml
+out/
+
+# =========================
+# 3. 파이썬 & AI 서버 (ai_server)
+# =========================
+ai_server/.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# RAG 벡터 DB 로컬 저장소
+ai_server/chroma_db/
+
+# (선택) 만약 docs 폴더 안에 용량이 큰 원본 PDF나 학교 데이터가 있다면 주석을 풀고 추가하세요.
+ai_server/docs/
+
+# =========================
+# 4. 자바 스프링 & 빌드 (main_server)
+# =========================
+main_server/.gradle/
+main_server/build/
+main_server/out/
+!main_server/gradle/wrapper/gradle-wrapper.jar
+
+# =========================
+# 5. 운영체제 (OS) 찌꺼기 파일
+# =========================
+.DS_Store
+Thumbs.db
