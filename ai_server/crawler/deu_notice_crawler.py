@@ -5,9 +5,13 @@ import os
 import time
 from tqdm import tqdm
 from markdownify import markdownify as md
+import urllib.parse
 
+# 첨부파일을 저장할 전용 폴더 설정
+ATTACHMENT_DIR = os.path.join(os.path.dirname(__file__), "data", "attachments")
+os.makedirs(ATTACHMENT_DIR, exist_ok=True)
 
-# 상세 페이지에 들어가서 본문만 긁어오기
+# 상세 페이지에 들어가서 긁어오기
 def get_notice_content(url):
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -18,21 +22,56 @@ def get_notice_content(url):
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
 
+            # 1. 본문 텍스트 추출
             content_area = soup.select_one('.fr-view')
 
-            if content_area:
-                # HMTL 덩어리(content_area)를 마크다운 텍스트로 변환
-                markdown_text = md(str(content_area))
+            if not content_area:
+                content_area = soup.select_one('.con')
 
-                # 앞뒤 쓸데없는 공백을 지우고 반환
-                return markdown_text.strip()
+            if content_area:
+                markdown_text = md(str(content_area)).strip()
             else:
-                return "본문 내용을 찾을 수 없습니다."
+                markdown_text = "본문 내용을 찾을 수 없습니다."
+
+            # 2. 첨부파일 다운로드
+            attachments = []
+            file_area = soup.select_one('.file')
+
+            if file_area:
+                file_links = file_area.select('a')
+                for a_tag in file_links:
+                    file_name = a_tag.get_text(strip=True)
+                    file_href = a_tag.get('href')
+
+                    # '첨부파일'이라는 글씨 자체도 <a> 태그에 걸려있을 수 있으므로 걸러냅니다.
+                    if not file_href or file_href == "#" or "첨부파일" in file_name:
+                        continue
+
+                    download_url = urllib.parse.urljoin(url, file_href)
+
+                    # 파일명 안전하게 처리 (특수문자 제거)
+                    safe_file_name = file_name.replace("/", "_").replace("\\", "_")
+                    file_path = os.path.join(ATTACHMENT_DIR, safe_file_name)
+
+                    # 이미 다운로드된 파일이 아니라면 다운로드 진행
+                    if not os.path.exists(file_path):
+                        print(f"      ⬇️ 첨부파일 다운로드 중: {safe_file_name}")
+                        file_response = requests.get(download_url, headers=headers)
+                        if file_response.status_code == 200:
+                            with open(file_path, 'wb') as f:
+                                f.write(file_response.content)
+
+                    # JSON에 기록할 첨부파일 정보 저장
+                    attachments.append({
+                        "file_name": safe_file_name,
+                        "file_path": file_path
+                    })
+            return markdown_text, attachments
 
     except Exception as e:
-        print(f"본문 크롤링 중 에러 발생: {e}")
+        print(f"본문/첨부파일 크롤링 중 에러 발생: {e}")
 
-    return "내용을 불러올 수 없습니다."
+    return "내용을 불러올 수 없습니다.", []
 
 # 1페이지: https://www.deu.ac.kr/www/deu-notice.do?mode=list&&articleLimit=10&article.offset=0
 # 2페이지: https://www.deu.ac.kr/www/deu-notice.do?mode=list&&articleLimit=10&article.offset=1
@@ -78,7 +117,7 @@ def crawl_deu_notice(category):
             date_text = date_td.get_text(strip=True) if date_td else "날짜없음"
 
             # 본문 내용 가져오기
-            content_text = get_notice_content(link_url)
+            content_text, attachments_list = get_notice_content(link_url)
             time.sleep(0.5)
 
             crawled_data.append({
@@ -86,7 +125,8 @@ def crawl_deu_notice(category):
                 "title": title,
                 "date": date_text,
                 "link": link_url,
-                "content": content_text
+                "content": content_text,
+                "attachments": attachments_list
             })
         # 너무 빨리 끝나면 로딩 바를 볼 수 없으니 0.5초 time sleep(크롤링 봇 차단 방지용으로도 좋음)
         time.sleep(0.5)
