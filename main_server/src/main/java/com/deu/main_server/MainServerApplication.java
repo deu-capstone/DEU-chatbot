@@ -12,3 +12,4 @@ public class MainServerApplication {
 
 }
 // http://localhost:8080/test-ai?msg=메세지 입력
+// http://127.0.0.1:8000/docs 주소창에 입력
