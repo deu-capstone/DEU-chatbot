@@ -40,7 +40,7 @@ else:
     print("📚 DB가 없네요! 크롤링한 JSON 데이터를 읽어 벡터 DB를 구축합니다...")
 
     # 크롤링한 JSON 파일 경로
-    json_file_path = "./crawler/data/deu_notices.json"
+    json_file_path = "./crawler/data/deu_notices_parsed.json"
 
     # JSON 파일 읽기
     with open(json_file_path, "r", encoding="utf-8") as f:
