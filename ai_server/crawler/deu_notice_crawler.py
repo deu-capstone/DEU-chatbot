@@ -35,6 +35,34 @@ def get_notice_content(url):
 
             # 2. 첨부파일 다운로드
             attachments = []
+
+            # 본문 속 이미지도 다운받아서 첨부파일로 추가
+            if content_area:
+                img_tags = content_area.select('img')
+                for img in img_tags:
+                    img_src = img.get('src')
+                    if img_src:
+                        # 다운로드 URL 만들기
+                        img_download_url = urllib.parse.urljoin(url, img_src)
+
+                        # 파일명 추출 (URL의 맨 마지막 부분)
+                        img_file_name = "본문이미지_" + img_download_url.split('/')[-1].replace("?", "_").replace("=", "_")
+                        img_file_path = os.path.join(ATTACHMENT_DIR, img_file_name)
+
+                        # 다운로드 진행
+                        if not os.path.exists(img_file_path):
+                            print(f"      🖼️ 본문 이미지 다운로드 중: {img_file_name}")
+                            img_response = requests.get(img_download_url, headers=headers)
+                            if img_response.status_code == 200:
+                                with open(img_file_path, 'wb') as f:
+                                    f.write(img_response.content)
+
+                        # 🌟 첨부파일 리스트에 쏙 집어넣습니다!
+                        attachments.append({
+                            "file_name": img_file_name,
+                            "file_path": img_file_path
+                        })
+
             file_area = soup.select_one('.file')
 
             if file_area:

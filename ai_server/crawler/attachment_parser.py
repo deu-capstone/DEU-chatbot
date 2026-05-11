@@ -3,8 +3,12 @@ import os
 import fitz  # PyMuPDF 라이브러리의 이름입니다.
 import subprocess
 import pandas as pd
+import re
+import pytesseract  # OCR 엔진 연결
+from PIL import Image  # 이미지 처리
 from tqdm import tqdm
 
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # ==========================================
 # 📄 1. PDF 텍스트 추출 함수
@@ -72,6 +76,27 @@ def extract_text_from_excel(file_path):
         print(f"\n  [Excel 에러] {file_path}: {e}")
         return ""
 
+# ==========================================
+# 🖼️ 4. 이미지 텍스트 추출 함수 (Tesseract OCR 사용)
+# ==========================================
+def extract_text_from_image(file_path):
+    try:
+        # 이미지를 엽니다.
+        img = Image.open(file_path)
+
+        # 🌟 Tesseract 엔진에게 한글과 영어 텍스트를 모두 읽어달라고 시킵니다.
+        extracted_text = pytesseract.image_to_string(img, lang='kor+eng')
+
+        # 정규표현식 필터를 적용하여 외계어(바이너리 찌꺼기) 전부 삭제!
+        clean_text = re.sub(r'[^가-힣ㄱ-ㅎㅏ-ㅣa-zA-Z0-9\s\.\,\-\(\)\[\]\:\/\<\>\%\*]', '', extracted_text)
+
+        # 쓸데없는 빈 줄들을 하나로 깔끔하게 압축합니다.
+        final_text = re.sub(r'\n+', '\n', clean_text).strip()
+        return final_text
+
+    except Exception as e:
+        print(f"\n  [Image 에러] {file_path}: {e}")
+        return ""
 
 # ==========================================
 # 🚀 4. 메인 파싱 파이프라인
@@ -113,7 +138,8 @@ def parse_attachments():
                 extracted_text = extract_text_from_hwp(file_path)
             elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
                 extracted_text = extract_text_from_excel(file_path)
-            # 이미지나 zip 파일은 현재로선 무시하고 건너 뜀
+            elif file_name.endswith(".jpg") or file_name.endswith(".jpeg") or file_name.endswith(".png"):
+                extracted_text = extract_text_from_image(file_path)
             else:
                 continue
 

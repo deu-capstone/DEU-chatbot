@@ -49,10 +49,10 @@ else:
     # JSON 데이터를 LangChain Document 객체로 변환
     docs = []
     for item in crawled_data:
-        content_text = item.get("content", "본문 내용이 없습니다.")
+        combined_text = f"제목: {item.get('title', '제목 없음')}\n\n내용:\n{item.get('content', '본문 내용이 없습니다.')}"
 
         doc = Document(
-            page_content=item["content"], # 챗봇이 읽고 판단할 진짜 본문 내용
+            page_content=combined_text, # 챗봇이 읽고 판단할 진짜 본문 내용
             metadata={
                 "category": item.get("category", "기타"),
                 "title": item.get("title", "제목 없음"),
@@ -86,8 +86,11 @@ class QuestionRequest(BaseModel):
 # 4. 프롬프트 세팅 (RAG 전용)
 prompt = ChatPromptTemplate.from_template("""
 당신은 동의대학교 학사 상담 챗봇입니다. 아래 제공된 [참고 문서]를 바탕으로 학생의 질문에 다정하고 명확하게 답변하세요.
-답변을 할 때는 내용 설명 후, 반드시 [참고 문서]에 있는 [출처 링크]를 활용하여 "자세한 내용은 [링크]를 참고해 주세요." 형태의 안내를 덧붙이세요.
-문서에 없는 내용이라면 지어내지 말고 "해당 내용은 규정에서 찾을 수 없습니다"라고 정직하게 답변하세요.
+
+답변을 작성할 때 다음 규칙을 반드시 지켜주세요:
+1. 정보의 출처가 명확하도록 [참고 문서]의 [제목]과 [작성일]을 자연스럽게 언급해 주세요. (예: "2026년 4월 20일에 올라온 [ㅇㅇ공지사항]에 따르면~")
+2. 내용 설명 후, 반드시 "자세한 내용은 [링크]를 참고해 주세요." 형태의 안내를 덧붙이세요.
+3. 문서에 없는 내용이라면 지어내지 말고 "해당 내용은 규정에서 찾을 수 없습니다"라고 정직하게 답변하세요.
 
 [참고 문서]
 {context}
@@ -99,7 +102,7 @@ prompt = ChatPromptTemplate.from_template("""
 def format_docs(docs):
     formatted_texts = []
     for doc in docs:
-        text = f"[내용]: {doc.page_content}\n[출처 링크]: {doc.metadata.get('link', '링크 없음')}"
+        text = f"[제목]: {doc.metadata.get('title', '제목 없음')}\n[내용]: {doc.page_content}\n[작성일]: {doc.metadata.get('date', '날짜 없음')}\n[출처 링크]: {doc.metadata.get('link', '링크 없음')}"
         formatted_texts.append(text)
     return "\n\n---\n\n".join(formatted_texts)
 
