@@ -3,53 +3,58 @@ from bs4 import BeautifulSoup
 import json
 import os
 import time
+import re
 from tqdm import tqdm
 from markdownify import markdownify as md
 import urllib.parse
+import sys
 
-# 첨부파일을 저장할 전용 폴더 설정
-ATTACHMENT_DIR = os.path.join(os.path.dirname(__file__), "data", "attachments")
+# 폴더 설정
+BASE_DIR = os.path.dirname(__file__)
+DATA_DIR = os.path.join(BASE_DIR, "data")
+ATTACHMENT_DIR = os.path.join(DATA_DIR, "attachments")
+STATUS_FILE = os.path.join(DATA_DIR, "update_status.json") # 상태 저장 파일 경로
+
+os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(ATTACHMENT_DIR, exist_ok=True)
 
-# 상세 페이지에 들어가서 긁어오기
-def get_notice_content(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
+# ==========================================
+# 1. 업데이트 상태 관리 함수 (마지막 ID 기억하기)
+# ==========================================
+def get_update_status():
+    if os.path.exists(STATUS_FILE):
+        with open(STATUS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {} # 파일이 없으면 빈 딕셔너리 반환
 
+def save_update_status(status_dict):
+    with open(STATUS_FILE, "w", encoding="utf-8") as f:
+        json.dump(status_dict, f, ensure_ascii=False, indent=4)
+
+# ==========================================
+# 2. 본문 및 첨부파일 크롤링 함수
+# ==========================================
+def get_notice_content(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
     try:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
 
-            # 1. 본문 텍스트 추출
-            content_area = soup.select_one('.fr-view')
+            content_area = soup.select_one('.fr-view') or soup.select_one('.con')
+            markdown_text = md(str(content_area)).strip() if content_area else "본문 내용을 찾을 수 없습니다."
 
-            if not content_area:
-                content_area = soup.select_one('.con')
-
-            if content_area:
-                markdown_text = md(str(content_area)).strip()
-            else:
-                markdown_text = "본문 내용을 찾을 수 없습니다."
-
-            # 2. 첨부파일 다운로드
             attachments = []
 
-            # 본문 속 이미지도 다운받아서 첨부파일로 추가
+            # 본문 이미지 다운로드
             if content_area:
-                img_tags = content_area.select('img')
-                for img in img_tags:
+                for img in content_area.select('img'):
                     img_src = img.get('src')
                     if img_src:
-                        # 다운로드 URL 만들기
                         img_download_url = urllib.parse.urljoin(url, img_src)
-
-                        # 파일명 추출 (URL의 맨 마지막 부분)
                         img_file_name = "본문이미지_" + img_download_url.split('/')[-1].replace("?", "_").replace("=", "_")
                         img_file_path = os.path.join(ATTACHMENT_DIR, img_file_name)
 
-                        # 다운로드 진행
                         if not os.path.exists(img_file_path):
                             print(f"      🖼️ 본문 이미지 다운로드 중: {img_file_name}")
                             img_response = requests.get(img_download_url, headers=headers)
@@ -57,31 +62,22 @@ def get_notice_content(url):
                                 with open(img_file_path, 'wb') as f:
                                     f.write(img_response.content)
 
-                        # 🌟 첨부파일 리스트에 쏙 집어넣습니다!
-                        attachments.append({
-                            "file_name": img_file_name,
-                            "file_path": img_file_path
-                        })
+                        attachments.append({"file_name": img_file_name, "file_path": img_file_path})
 
+            # 일반 첨부파일 다운로드
             file_area = soup.select_one('.file')
-
             if file_area:
-                file_links = file_area.select('a')
-                for a_tag in file_links:
+                for a_tag in file_area.select('a'):
                     file_name = a_tag.get_text(strip=True)
                     file_href = a_tag.get('href')
 
-                    # '첨부파일'이라는 글씨 자체도 <a> 태그에 걸려있을 수 있으므로 걸러냅니다.
                     if not file_href or file_href == "#" or "첨부파일" in file_name:
                         continue
 
                     download_url = urllib.parse.urljoin(url, file_href)
-
-                    # 파일명 안전하게 처리 (특수문자 제거)
                     safe_file_name = file_name.replace("/", "_").replace("\\", "_")
                     file_path = os.path.join(ATTACHMENT_DIR, safe_file_name)
 
-                    # 이미 다운로드된 파일이 아니라면 다운로드 진행
                     if not os.path.exists(file_path):
                         print(f"      ⬇️ 첨부파일 다운로드 중: {safe_file_name}")
                         file_response = requests.get(download_url, headers=headers)
@@ -89,120 +85,125 @@ def get_notice_content(url):
                             with open(file_path, 'wb') as f:
                                 f.write(file_response.content)
 
-                    # JSON에 기록할 첨부파일 정보 저장
-                    attachments.append({
-                        "file_name": safe_file_name,
-                        "file_path": file_path
-                    })
-            return markdown_text, attachments
+                    attachments.append({"file_name": safe_file_name, "file_path": file_path})
 
+            return markdown_text, attachments
     except Exception as e:
         print(f"본문/첨부파일 크롤링 중 에러 발생: {e}")
 
     return "내용을 불러올 수 없습니다.", []
 
-# 1페이지: https://www.deu.ac.kr/www/deu-notice.do?mode=list&&articleLimit=10&article.offset=0
-# 2페이지: https://www.deu.ac.kr/www/deu-notice.do?mode=list&&articleLimit=10&article.offset=1
-
-def crawl_deu_notice(category):
-    # 1. 크롤링할 대상 URL (동의대 홈페이지 공지사항 예시 주소, 실제 주소로 변경 필요)
-    category = category
-    url = "https://www.deu.ac.kr/www/deu-" + category + ".do"
-
-    # 2. 봇(Bot) 차단을 막기 위해 일반 브라우저인 척하는 헤더 추가
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
+# ==========================================
+# 3. 목록 크롤링 함수 (새 글 필터링 적용)
+# ==========================================
+def crawl_deu_notice(category, last_id):
+    url = f"https://www.deu.ac.kr/www/deu-{category}.do"
+    headers = {"User-Agent": "Mozilla/5.0"}
 
     response = requests.get(url, headers=headers)
-
-    # 정상적으로 페이지를 불러왔는지 확인 (200이면 성공)
-    if response.status_code == 200:
-        # 3. BeautifulSoup을 이용해 HTML 구조를 파이썬이 읽기 쉽게 변환
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        # 1. 제목이 들어있는 <td> 태그들을 모두 찾습니다.
-        subjects = soup.select('.subject')
-
-        crawled_data = []
-        for td_subject in subjects:
-            # 2. 부모 태그인 <tr>(게시글 한 줄 전체)을 찾아냅니다.
-            tr = td_subject.find_parent('tr')
-
-            # 3. 제목과 링크 가져오기
-            a_tag = td_subject.select_one('a')
-            if not a_tag:
-                continue  # 혹시 빈 줄이 있으면 건너뜀
-
-            title = a_tag.get_text(strip=True)
-            link = a_tag.get('href')
-            link_url = f"https://www.deu.ac.kr/www/deu-{category}.do{link}"
-
-            # 4. 작성일자 가져오기
-            date_td = tr.select_one('.data')
-
-            # 날짜 태그를 찾았다면 텍스트를 뽑고, 아니면 '날짜없음' 처리
-            date_text = date_td.get_text(strip=True) if date_td else "날짜없음"
-
-            # 본문 내용 가져오기
-            content_text, attachments_list = get_notice_content(link_url)
-            time.sleep(0.5)
-
-            crawled_data.append({
-                "category": category,
-                "title": title,
-                "date": date_text,
-                "link": link_url,
-                "content": content_text,
-                "attachments": attachments_list
-            })
-        # 너무 빨리 끝나면 로딩 바를 볼 수 없으니 0.5초 time sleep(크롤링 봇 차단 방지용으로도 좋음)
-        time.sleep(0.5)
-        return crawled_data
-    else:
+    if response.status_code != 200:
         print(f"페이지 접속 실패! 에러 코드: {response.status_code}")
-        return []
+        return [], last_id
 
+    soup = BeautifulSoup(response.text, 'html.parser')
+    subjects = soup.select('.subject')
 
-def save_to_json(data):
-    if not data:
-        print("저장할 데이터가 없습니다.")
+    crawled_data = []
+    max_id = last_id  # 현재 카테고리의 최고 번호를 추적합니다.
+
+    for td_subject in subjects:
+        a_tag = td_subject.select_one('a')
+        if not a_tag: continue
+
+        title = a_tag.get_text(strip=True)
+        link = a_tag.get('href')
+        link_url = f"https://www.deu.ac.kr/www/deu-{category}.do{link}"
+
+        # URL에서 articleNo(글 번호)를 숫자로 추출합니다.
+        match = re.search(r'articleNo=(\d+)', link)
+        article_no = int(match.group(1)) if match else 0
+
+        # 이미 읽은 글이면 수집을 건너뜁니다!
+        # (상단 고정 '공지'는 옛날 글일 수 있으므로 break가 아닌 continue를 씁니다)
+        if article_no > 0 and article_no <= last_id:
+            continue
+
+        # 새 글이라면 최고 번호 갱신
+        max_id = max(max_id, article_no)
+
+        tr = td_subject.find_parent('tr')
+        date_td = tr.select_one('.data')
+        date_text = date_td.get_text(strip=True) if date_td else "날짜없음"
+
+        print(f"\n  [새 글 수집 중] {title}")
+        content_text, attachments_list = get_notice_content(link_url)
+        time.sleep(0.5)
+
+        crawled_data.append({
+            "category": category,
+            "title": title,
+            "date": date_text,
+            "link": link_url,
+            "content": content_text,
+            "attachments": attachments_list
+        })
+
+    return crawled_data, max_id
+
+# ==========================================
+# 4. JSON 저장 함수 (기존 데이터에 이어 붙이기)
+# ==========================================
+def save_to_json(new_data):
+    if not new_data:
         return
 
-    # 저장할 data 폴더 경로 설정 (없으면 자동으로 만듦)
-    save_dir = os.path.join(os.path.dirname(__file__), "data")
-    os.makedirs(save_dir, exist_ok=True)
+    file_path = os.path.join(DATA_DIR, "deu_notices.json")
+    existing_data = []
 
-    file_path = os.path.join(save_dir, "deu_notices.json")
+    # 기존 데이터가 있으면 불러오기
+    if os.path.exists(file_path):
+        with open(file_path, 'r', encoding='utf-8') as f:
+            existing_data = json.load(f)
 
-    # JSON 파일로 저장
+    # 새 데이터를 리스트 맨 앞(최신순)에 이어 붙입니다.
+    combined_data = new_data + existing_data
+
     with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        json.dump(combined_data, f, ensure_ascii=False, indent=4)
 
-    print(f"크롤링 완료! 총 {len(data)}개의 데이터가 '{file_path}'에 저장되었습니다.")
+    print(f"\n📁 로컬 파일 업데이트 완료! (새로 추가됨: {len(new_data)}건 / 총 누적: {len(combined_data)}건)")
 
 
-# 이 스크립트를 직접 실행했을 때만 작동하도록 하는 안전장치
+# ==========================================
+# 🚀 메인 실행 로직
+# ==========================================
 if __name__ == "__main__":
-    # notice: 일반, scholarship: 장학, education: 교육/모집, job: 채용
     category_list = ["notice", "scholarship", "education", "job"]
 
-    all_results = []
+    # 1. 어디까지 읽었는지 상태 불러오기
+    status = get_update_status()
+    all_new_results = []
 
-    print("공지사항 크롤링을 시작합니다...")
-    for cat in tqdm(category_list, desc="크롤링 진행률", unit="게시판"):
-        result_data = crawl_deu_notice(cat)
-        all_results.extend(result_data)
+    print("공지사항 크롤링(증분 업데이트)을 시작합니다...\n")
 
-    print(f"\n✅ 크롤링 완료! 총 {len(all_results)}개의 데이터를 수집했습니다.")
+    for cat in tqdm(category_list, desc="전체 진행률", unit="게시판"):
+        # 각 카테고리별 마지막 ID 가져오기 (처음엔 0)
+        last_id = status.get(cat, 0)
 
-    # ==========================================
-    print("=== 📄 수집된 데이터 목록 ===")
-    for i, item in enumerate(all_results, 1):
-        # enumerate(..., 1)은 1번부터 숫자를 세어주는 기능입니다.
-        print(f"[{item['category'].upper()}] {item['title']}  📅 [{item['date']}]")
-        print(f"    🔗 {item['link']}")
-        print(f"    📝 {item['content'][:80]}...")
-    print("=============================\n")
+        # 새 글만 크롤링
+        result_data, new_max_id = crawl_deu_notice(cat, last_id)
+        all_new_results.extend(result_data)
 
-    save_to_json(all_results)
+        # 최고 번호가 갱신되었다면 상태 업데이트
+        if new_max_id > last_id:
+            status[cat] = new_max_id
+
+    # 2. 새로 수집된 데이터가 있다면 저장하고 상태 파일(update_status.json) 갱신!
+    if all_new_results:
+        print(f"\n✅ 총 {len(all_new_results)}개의 새로운 공지사항을 찾았습니다!")
+        save_to_json(all_new_results)
+        save_update_status(status) # 여기서 상태 파일이 생성/갱신됩니다.
+        sys.exit(0)  # 0번 신호: "성공했고, 새 데이터도 있음!"
+    else:
+        print("\n✨ 새로 올라온 공지사항이 없습니다. (최신 상태 유지 중)")
+        sys.exit(99) # 99번 신호: "성공했는데, 새 데이터는 없음!"

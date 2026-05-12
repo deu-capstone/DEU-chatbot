@@ -42,38 +42,50 @@ else:
     # 크롤링한 JSON 파일 경로
     json_file_path = "./crawler/data/deu_notices_parsed.json"
 
-    # JSON 파일 읽기
-    with open(json_file_path, "r", encoding="utf-8") as f:
-        crawled_data = json.load(f)
+    try:
+        # JSON 파일 읽기
+        with open(json_file_path, "r", encoding="utf-8") as f:
+            crawled_data = json.load(f)
 
-    # JSON 데이터를 LangChain Document 객체로 변환
-    docs = []
-    for item in crawled_data:
-        combined_text = f"제목: {item.get('title', '제목 없음')}\n\n내용:\n{item.get('content', '본문 내용이 없습니다.')}"
+        # JSON 데이터를 LangChain Document 객체로 변환
+        docs = []
+        for item in crawled_data:
+            combined_text = f"제목: {item.get('title', '제목 없음')}\n\n내용:\n{item.get('content', '본문 내용이 없습니다.')}"
 
-        doc = Document(
-            page_content=combined_text, # 챗봇이 읽고 판단할 진짜 본문 내용
-            metadata={
-                "category": item.get("category", "기타"),
-                "title": item.get("title", "제목 없음"),
-                "date": item.get("date", "날짜 없음"),
-                "link": item.get("link", "링크 없음")
-            }
+            doc = Document(
+                page_content=combined_text, # 챗봇이 읽고 판단할 진짜 본문 내용
+                metadata={
+                    "category": item.get("category", "기타"),
+                    "title": item.get("title", "제목 없음"),
+                    "date": item.get("date", "날짜 없음"),
+                    "link": item.get("link", "링크 없음")
+                }
+            )
+            docs.append(doc)
+
+        print(f"총 {len(docs)}개의 공지사항을 Document로 변환했습니다. 청크 분할을 시작합니다...")
+
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
+        splits = text_splitter.split_documents(docs)
+
+        # DB를 만들면서 './chroma_db' 폴더에 영구 저장합니다.
+        vectorstore = Chroma.from_documents(
+            documents=splits,
+            embedding=OpenAIEmbeddings(),
+            persist_directory=DB_DIR
         )
-        docs.append(doc)
+        print("✅ JSON 데이터 기반 벡터 DB 로컬 저장 완료!")
 
-    print(f"총 {len(docs)}개의 공지사항을 Document로 변환했습니다. 청크 분할을 시작합니다...")
+    except FileNotFoundError:
+        # 파일이 없으면 에러를 뿜는 대신 빈 DB를 만들고 서버를 켭니다!
+        print("⚠️ [경고] 파싱된 JSON 파일이 없습니다! 일단 '빈 DB'로 서버를 실행합니다.")
+        print("⚠️ 서버가 켜진 상태에서 'python run_pipeline.py'를 실행해 DB를 채워주세요!")
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
-    splits = text_splitter.split_documents(docs)
+        vectorstore = Chroma(
+            embedding_function=OpenAIEmbeddings(),
+            persist_directory=DB_DIR
+        )
 
-    # DB를 만들면서 './chroma_db' 폴더에 영구 저장합니다.
-    vectorstore = Chroma.from_documents(
-        documents=splits,
-        embedding=OpenAIEmbeddings(),
-        persist_directory=DB_DIR
-    )
-    print("✅ JSON 데이터 기반 벡터 DB 로컬 저장 완료!")
 
 # 검색 결과 개수 10개
 retriever = vectorstore.as_retriever(search_kwargs={"k": 10})
@@ -126,3 +138,66 @@ async def ask_ai(request: QuestionRequest):
 
     result = rag_chain.invoke(request.question)
     return {"answer": result}
+
+# =====================================================================
+# 7. 벡터 DB 수동/자동 업데이트 API (증분 업데이트 지원)
+# =====================================================================
+@app.post("/update_db")
+async def update_database():
+    print("🔄 DB 업데이트 요청을 받았습니다! 최신 데이터를 읽어옵니다...")
+
+    json_file_path = "./crawler/data/deu_notices_parsed.json"
+
+    if not os.path.exists(json_file_path):
+        return {"error": "파싱된 JSON 파일을 찾을 수 없습니다."}
+
+    with open(json_file_path, "r", encoding="utf-8") as f:
+        crawled_data = json.load(f)
+
+    # 1. 업데이트 전 기존 DB의 조각(Chunk) 개수 확인
+    old_count = vectorstore._collection.count()
+
+    # 2. JSON 데이터를 Document 객체로 변환
+    docs = []
+    for item in crawled_data:
+        combined_text = f"제목: {item.get('title', '제목 없음')}\n\n내용:\n{item.get('content', '본문 내용이 없습니다.')}"
+        doc = Document(
+            page_content=combined_text,
+            metadata={
+                "category": item.get("category", "기타"),
+                "title": item.get("title", "제목 없음"),
+                "date": item.get("date", "날짜 없음"),
+                "link": item.get("link", "링크 없음")
+            }
+        )
+        docs.append(doc)
+
+    # 3. 청크 분할
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
+    splits = text_splitter.split_documents(docs)
+
+    # 4. 핵심: 중복 저장을 막기 위한 '고유 ID' 생성
+    # 같은 공지사항이라도 조각이 여러 개 날 수 있으므로 "링크_조각번호" 형태로 ID를 만듭니다.
+    ids = []
+    chunk_counters = {}
+    for split in splits:
+        link = split.metadata["link"]
+        chunk_counters[link] = chunk_counters.get(link, 0) + 1
+        chunk_id = f"{link}_{chunk_counters[link]}"
+        ids.append(chunk_id)
+
+    # 5. DB에 덮어쓰기 (Upsert)
+    # ChromaDB는 이미 존재하는 ID가 들어오면 무시하거나 덮어쓰고, 새로운 ID만 새로 추가합니다!
+    vectorstore.add_documents(documents=splits, ids=ids)
+
+    # 6. 업데이트 후 늘어난 개수 계산
+    new_count = vectorstore._collection.count()
+    added_count = new_count - old_count
+
+    print(f"✅ DB 업데이트 완료! (새로 추가된 데이터 조각: {added_count}개)")
+    return {
+        "message": "DB 업데이트가 성공적으로 완료되었습니다.",
+        "before_count": old_count,
+        "after_count": new_count,
+        "added_chunks": added_count
+    }
