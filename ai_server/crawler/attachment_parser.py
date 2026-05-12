@@ -6,6 +6,8 @@ import pandas as pd
 import re
 import pytesseract  # OCR 엔진 연결
 from PIL import Image  # 이미지 처리
+import zipfile
+import tempfile
 from tqdm import tqdm
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -99,7 +101,48 @@ def extract_text_from_image(file_path):
         return ""
 
 # ==========================================
-# 🚀 4. 메인 파싱 파이프라인
+# 🗂️ 5. ZIP 압축 파일 텍스트 추출 함수
+# ==========================================
+def extract_text_from_zip(file_path):
+    extracted_text = ""
+    try:
+        # 안전하게 작업하기 위해 '임시 폴더(temp_dir)'를 만듭니다.
+        # (with문이 끝나면 컴퓨터가 알아서 폴더를 통째로 싹 지워줍니다)
+        with tempfile.TemporaryDirectory() as temp_dir:
+
+            # 1. 임시 폴더에 압축 풀기
+            with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+
+            # 2. 임시 폴더 안의 모든 파일을 싹 뒤집니다. (폴더 안에 폴더가 있어도 다 찾음)
+            for root, dirs, files in os.walk(temp_dir):
+                for file in files:
+                    ext_file_path = os.path.join(root, file)
+                    file_name = file.lower()
+                    text = ""
+
+                    # 3. 확장자에 맞춰서 우리가 만들어둔 함수들을 재사용합니다!
+                    if file_name.endswith(".pdf"):
+                        text = extract_text_from_pdf(ext_file_path)
+                    elif file_name.endswith(".hwp"):
+                        text = extract_text_from_hwp(ext_file_path)
+                    elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
+                        text = extract_text_from_excel(ext_file_path)
+                    elif file_name.endswith((".jpg", ".jpeg", ".png")):
+                        text = extract_text_from_image(ext_file_path)
+
+                    # 4. 뽑아낸 텍스트가 있다면, 어떤 파일에서 나왔는지 꼬리표를 달아 이어 붙입니다.
+                    if text.strip():
+                        extracted_text += f"\n\n--- [ZIP 내 압축해제 파일: {file}] ---\n{text}"
+
+        return extracted_text.strip()
+
+    except Exception as e:
+        print(f"\n  [ZIP 에러] {file_path}: {e}")
+        return ""
+
+# ==========================================
+# 🚀 6. 메인 파싱 파이프라인
 # ==========================================
 def parse_attachments():
     # 어제 만든 JSON 파일 위치
@@ -140,6 +183,8 @@ def parse_attachments():
                 extracted_text = extract_text_from_excel(file_path)
             elif file_name.endswith(".jpg") or file_name.endswith(".jpeg") or file_name.endswith(".png"):
                 extracted_text = extract_text_from_image(file_path)
+            elif file_name.endswith(".zip"):
+                extracted_text = extract_text_from_zip(file_path)
             else:
                 continue
 
