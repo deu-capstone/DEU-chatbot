@@ -2,6 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 import requests
 import os
+import time
 from dotenv import load_dotenv
 
 def get_authenticated_session():
@@ -23,13 +24,13 @@ def get_authenticated_session():
         driver.get("https://dap.deu.ac.kr/sso/login.aspx")
 
         # 4. 아이디/비밀번호 입력 및 로그인 버튼 클릭 (실제 태그 ID 확인 필요)
-        # TODO: 실제 DAP 로그인 페이지의 input 태그 id값으로 'id_input_id', 'pw_input_id' 등을 변경해야 합니다.
         driver.find_element(By.ID, "id").send_keys(user_id)
         driver.find_element(By.ID, "pw").send_keys(user_pw)
         driver.find_element(By.ID, "btn-login").click()
 
         # 로그인 완료 대기 (예: 로그인 후 나타나는 특정 요소가 로드될 때까지)
-        # WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.ID, "logout_button_id")))
+        print("SSO 통합 로그인 처리 중... (약 3초 대기)")
+        time.sleep(3)
 
         # 5. 로그인된 세션 쿠키 추출
         cookies = driver.get_cookies()

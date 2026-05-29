@@ -144,25 +144,23 @@ def extract_text_from_zip(file_path):
 # ==========================================
 # 🚀 6. 메인 파싱 파이프라인
 # ==========================================
-def parse_attachments():
-    # 어제 만든 JSON 파일 위치
-    input_json_path = os.path.join(os.path.dirname(__file__), "data", "deu_notices.json")
-
-    # 텍스트가 추가되어 새롭게 저장될 JSON 파일 위치
-    output_json_path = os.path.join(os.path.dirname(__file__), "data", "deu_notices_parsed.json")
+def parse_attachments(input_file, output_file):
+    # 전달받은 파일 이름으로 경로를 세팅합니다.
+    input_json_path = os.path.join(os.path.dirname(__file__), "data", input_file)
+    output_json_path = os.path.join(os.path.dirname(__file__), "data", output_file)
 
     # 1. 파일 열기
     if not os.path.exists(input_json_path):
-        print("❌ deu_notices.json 파일이 없습니다. 먼저 크롤링을 진행해 주세요!")
+        print(f"❌ {input_file} 파일이 없습니다. 먼저 크롤링을 진행해 주세요!")
         return
 
     with open(input_json_path, "r", encoding="utf-8") as f:
         notices = json.load(f)
 
-    print(f"총 {len(notices)}개의 공지사항을 검사합니다...")
+    print(f"[{input_file}] 총 {len(notices)}개의 공지사항을 검사합니다...")
 
     # 2. 공지사항을 하나씩 돌면서 첨부파일 확인
-    for notice in tqdm(notices, desc="첨부파일 파싱 진행률"):
+    for notice in tqdm(notices, desc=f"{input_file} 파싱 진행률"):
         attachments = notice.get("attachments", [])
 
         for att in attachments:
@@ -181,7 +179,7 @@ def parse_attachments():
                 extracted_text = extract_text_from_hwp(file_path)
             elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
                 extracted_text = extract_text_from_excel(file_path)
-            elif file_name.endswith(".jpg") or file_name.endswith(".jpeg") or file_name.endswith(".png"):
+            elif file_name.endswith((".jpg", ".jpeg", ".png")):
                 extracted_text = extract_text_from_image(file_path)
             elif file_name.endswith(".zip"):
                 extracted_text = extract_text_from_zip(file_path)
@@ -196,8 +194,17 @@ def parse_attachments():
     with open(output_json_path, "w", encoding="utf-8") as f:
         json.dump(notices, f, ensure_ascii=False, indent=4)
 
-    print(f"\n✅ 파싱 완료! 결과물이 '{output_json_path}'에 저장되었습니다.")
+    print(f"✅ [{input_file}] 파싱 완료! 결과물이 '{output_json_path}'에 저장되었습니다.\n")
 
 
+# ==========================================
+# 🚀 실행 영역
+# ==========================================
 if __name__ == "__main__":
-    parse_attachments()
+    # ✅ 2. 대표 홈페이지 데이터 파싱
+    print("🔵 대표 홈페이지 공지사항 첨부파일 파싱을 시작합니다...")
+    parse_attachments("deu_notices.json", "deu_notices_parsed.json")
+
+    # ✅ 3. 학생종합홈페이지(DAP) 데이터 파싱
+    print("🟢 학생종합홈페이지(DAP) 공지사항 첨부파일 파싱을 시작합니다...")
+    parse_attachments("dap_notices.json", "dap_notices_parsed.json")

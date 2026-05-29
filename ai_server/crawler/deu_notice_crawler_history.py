@@ -13,7 +13,7 @@ import sys
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 ATTACHMENT_DIR = os.path.join(DATA_DIR, "attachments")
-STATUS_FILE = os.path.join(DATA_DIR, "update_status.json")
+STATUS_FILE = os.path.join(DATA_DIR, "deu_update_status.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(ATTACHMENT_DIR, exist_ok=True)
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         # 내일 구동할 증분 스크립트를 위해 상태 파일 갱신
         with open(STATUS_FILE, "w", encoding="utf-8") as f:
             json.dump(status, f, ensure_ascii=False, indent=4)
-        print("✅ update_status.json 파일이 성공적으로 설정되었습니다. 이제부터는 기존 스크립트를 사용하세요!")
+        print("✅ deu_update_status.json 파일이 성공적으로 설정되었습니다. 이제부터는 기존 스크립트를 사용하세요!")
 
         sys.exit(0)
     else:
