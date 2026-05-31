@@ -11,6 +11,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.documents import Document
 from dotenv import load_dotenv
+from pydantic import BaseModel
 
 # .env 파일에 있는 변수들을 파이썬 시스템 환경 변수로 불러옵니다.
 load_dotenv()
@@ -211,3 +212,50 @@ async def update_database():
         "after_count": new_count,
         "added_chunks": added_count
     }
+
+# =====================================================================
+# 8. 벡터 DB (의미 기반) 맞춤형 추천 API
+# ========================================== ===========================
+class RecommendRequest(BaseModel):
+    department: str = ""
+    history: list[str] = []
+
+@app.post("/recommend")
+async def get_recommendations(request: RecommendRequest):
+    print(f"💡 [추천 요청] 학과: {request.department}, 검색기록: {request.history}")
+
+    query = ""
+    # 1. 프롬프트 엔지니어링: AI가 문맥을 더 잘 찾도록 질문을 예쁘게 포장합니다.
+    if request.department:
+        query = f"{request.department} 학과 대학생에게 유용한 장학금, 취업, 학사일정, 특강 관련 공지사항"
+    elif request.history:
+        history_str = " ".join(request.history)
+        query = f"다음 키워드와 관련된 유용한 공지사항: {history_str}"
+
+    if not query:
+        return {"recommendations": []}
+
+    # 2. 벡터 DB에서 의미상 가장 가까운 조각 15개를 가져옵니다.
+    # (같은 공지사항에서 여러 조각이 나올 수 있으므로 넉넉하게 가져옵니다)
+    search_results = vectorstore.similarity_search(query, k=15)
+
+    unique_recommendations = []
+    seen_links = set()
+
+    # 3. 중복 제거 작업: 같은 공지사항(링크)은 한 번만 추천 리스트에 넣습니다.
+    for doc in search_results:
+        link = doc.metadata.get("link", "")
+        title = doc.metadata.get("title", "제목 없음")
+
+        if link not in seen_links:
+            unique_recommendations.append({
+                "title": title,
+                "link": link
+            })
+            seen_links.add(link)
+
+        # 정확히 상위 5개만 모이면 멈춥니다.
+        if len(unique_recommendations) >= 5:
+            break
+
+    return {"recommendations": unique_recommendations}

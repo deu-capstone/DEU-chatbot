@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>동의대 학사 상담 챗봇</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+
+        /* 전체 틀: 사이드바와 채팅창을 나란히 배치 */
+        .main-wrapper { display: flex; width: 850px; height: 650px; background-color: white; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }
+
+        /* 왼쪽 사이드바 영역 */
+        .sidebar { width: 300px; background-color: #f8f9fa; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
+        .sidebar-header { background-color: #00305b; color: white; padding: 15px; text-align: center; font-size: 1.1em; font-weight: bold; }
+        .sidebar-content { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
+
+        /* 추천 리스트 공통 스타일 */
+        .recommend-section h4 { margin: 0 0 10px 0; font-size: 1em; color: #00305b; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+        .recommend-list { list-style: none; padding: 0; margin: 0; font-size: 0.85em; }
+        .recommend-list li { margin-bottom: 8px; line-height: 1.3; }
+        .recommend-list a { color: #333; text-decoration: none; }
+        .recommend-list a:hover { color: #00305b; font-weight: bold; text-decoration: underline; }
+        .loading-text { font-size: 0.85em; color: #777; }
+
+        /* 학과 입력부 */
+        .dept-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
+        .dept-input-group input { flex: 1; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
+        .dept-input-group button { background-color: #00305b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
+
+        /* 오른쪽 채팅창 영역 */
+        .chat-container { flex: 1; display: flex; flex-direction: column; background-color: white; }
+        .chat-header { background-color: #004080; color: white; padding: 15px; text-align: center; font-size: 1.1em; font-weight: bold; }
+        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+
+        /* 말풍선 스타일 */
+        .message { max-width: 80%; padding: 10px 15px; border-radius: 15px; line-height: 1.4; font-size: 0.95em; }
+        .msg-user { background-color: #e1f5fe; color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
+        .msg-bot { background-color: #f1f0f0; color: #333; align-self: flex-start; border-bottom-left-radius: 2px; white-space: pre-wrap; }
+
+        /* 입력창 영역 */
+        .chat-input-area { display: flex; padding: 15px; border-top: 1px solid #ddd; background-color: #fafafa; }
+        .chat-input-area input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; font-size: 1em; }
+        .chat-input-area button { background-color: #004080; color: white; border: none; padding: 10px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="main-wrapper">
+    <div class="sidebar">
+        <div class="sidebar-header">⭐ 맞춤형 추천 공지</div>
+        <div class="sidebar-content">
+
+            <div class="recommend-section">
+                <h4>🎓 내 학과 공지사항</h4>
+                <div class="dept-input-group">
+                    <input type="text" id="deptInput" placeholder="학과 입력 (예: 소프트웨어)">
+                    <button onclick="saveAndFetchDept()">적용</button>
+                </div>
+                <ul class="recommend-list" id="deptRecommendList">
+                    <li class="loading-text">학과를 입력하면 맞춤 공지를 찾아드립니다.</li>
+                </ul>
+            </div>
+
+            <div class="recommend-section">
+                <h4>⏱️ 최근 관심사 추천</h4>
+                <ul class="recommend-list" id="historyRecommendList">
+                    <li class="loading-text">채팅으로 질문을 남기면 관심사를 분석해 드립니다.</li>
+                </ul>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="chat-container">
+        <div class="chat-header">💬 동의대 학사 상담 챗봇</div>
+
+        <div class="chat-box" id="chatBox">
+            <div class="message msg-bot">안녕하세요! 동의대학교 학사 안내 챗봇입니다. 궁금한 점을 편하게 물어보세요!</div>
+        </div>
+
+        <div class="chat-input-area">
+            <input type="text" id="userInput" placeholder="질문을 입력하세요..." onkeypress="handleEnter(event)">
+            <button onclick="sendMessage()">전송</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById('chatBox');
+    const userInput = document.getElementById('userInput');
+
+    // 페이지 로드 시 초기화 작업
+    window.onload = function() {
+        // 저장된 학과가 있으면 불러오기
+        const savedDept = localStorage.getItem('userDept');
+        if (savedDept) {
+            document.getElementById('deptInput').value = savedDept;
+            fetchDeptRecommendations(savedDept);
+        }
+        // 저장된 검색 기록으로 추천 불러오기
+        fetchHistoryRecommendations();
+    };
+
+    function handleEnter(event) {
+        if (event.key === 'Enter') sendMessage();
+    }
+
+    // ==========================================
+    // 1. 학과 추천 로직
+    // ==========================================
+    function saveAndFetchDept() {
+        const dept = document.getElementById('deptInput').value.trim();
+        if (!dept) return;
+
+        localStorage.setItem('userDept', dept);
+        fetchDeptRecommendations(dept);
+    }
+
+    async function fetchDeptRecommendations(dept) {
+        const listEl = document.getElementById('deptRecommendList');
+        listEl.innerHTML = '<li class="loading-text">학과 공지를 찾고 있습니다...</li>';
+
+        try {
+            // 파이썬 코드가 if (department)를 먼저 검사하므로 history는 비워서 보냅니다.
+            const response = await fetch('/api/recommend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ department: dept, history: [] })
+            });
+            const data = await response.json();
+
+            if (!data.recommendations || data.recommendations.length === 0) {
+                listEl.innerHTML = '<li class="loading-text">최근 6개월 내 관련 공지가 없습니다.</li>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            data.recommendations.forEach(item => {
+                listEl.innerHTML += `<li><a href="${item.link}" target="_blank">📄 ${item.title}</a></li>`;
+            });
+        } catch (error) {
+            listEl.innerHTML = '<li class="loading-text">서버 연결 실패</li>';
+        }
+    }
+
+    // ==========================================
+    // 2. 검색 기록 추천 로직
+    // ==========================================
+    function saveSearchHistory(question) {
+        let history = JSON.parse(localStorage.getItem('chatHistory')) || [];
+        history.push(question);
+        if (history.length > 5) history.shift();
+        localStorage.setItem('chatHistory', JSON.stringify(history));
+    }
+
+    async function fetchHistoryRecommendations() {
+        const history = JSON.parse(localStorage.getItem('chatHistory')) || [];
+        const listEl = document.getElementById('historyRecommendList');
+
+        if (history.length === 0) {
+            listEl.innerHTML = '<li class="loading-text">채팅창에 질문을 남겨보세요!</li>';
+            return;
+        }
+
+        listEl.innerHTML = '<li class="loading-text">관심사를 분석 중입니다...</li>';
+
+        try {
+            // 이번엔 history만 채워서 보냅니다.
+            const response = await fetch('/api/recommend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ department: "", history: history })
+            });
+            const data = await response.json();
+
+            if (!data.recommendations || data.recommendations.length === 0) {
+                listEl.innerHTML = '<li class="loading-text">관련된 추천 공지가 없습니다.</li>';
+                return;
+            }
+
+            listEl.innerHTML = '';
+            data.recommendations.forEach(item => {
+                listEl.innerHTML += `<li><a href="${item.link}" target="_blank">💡 ${item.title}</a></li>`;
+            });
+        } catch (error) {
+            listEl.innerHTML = '<li class="loading-text">서버 연결 실패</li>';
+        }
+    }
+
+    // ==========================================
+    // 3. 챗봇 채팅 로직
+    // ==========================================
+    async function sendMessage() {
+        const text = userInput.value.trim();
+        if (!text) return;
+
+        appendMessage(text, 'msg-user');
+
+        // 질문을 할 때마다 검색 기록을 저장하고, 즉시 왼쪽 아래 추천 리스트를 갱신합니다!
+        saveSearchHistory(text);
+        fetchHistoryRecommendations();
+
+        userInput.value = '';
+
+        const loadingMsgId = appendMessage("답변을 찾고 있습니다...", 'msg-bot');
+
+        try {
+            const response = await fetch(`/test-ai?msg=${encodeURIComponent(text)}`);
+            const answer = await response.text();
+            document.getElementById(loadingMsgId).innerText = answer;
+        } catch (error) {
+            document.getElementById(loadingMsgId).innerText = "❌ 서버와 연결할 수 없습니다.";
+        }
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function appendMessage(text, className) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `message ${className}`;
+        msgDiv.innerText = text;
+
+        const id = 'msg-' + Date.now();
+        msgDiv.id = id;
+
+        chatBox.appendChild(msgDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        return id;
+    }
+</script>
+
+</body>
+</html>
