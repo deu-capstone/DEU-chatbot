@@ -27,6 +27,12 @@ app = FastAPI(title="동의대 RAG 챗봇 서버")
 # =====================================================================
 DB_DIR = "./chroma_db"  # DB를 저장할 폴더 이름
 
+# 🌟 읽어올 파싱 데이터 파일 목록 (대표홈페이지 + DAP홈페이지)
+JSON_FILES = [
+    "./crawler/data/deu_notices_parsed.json",
+    "./crawler/data/dap_notices_parsed.json"
+]
+
 # 1. 만약 기존에 만들어둔 DB 폴더가 있다면? -> 1초 만에 불러오기
 if os.path.exists(DB_DIR):
     print("📁 기존에 만들어둔 벡터 DB를 빠르게 불러옵니다...")
@@ -39,14 +45,25 @@ if os.path.exists(DB_DIR):
 else:
     print("📚 DB가 없네요! 크롤링한 JSON 데이터를 읽어 벡터 DB를 구축합니다...")
 
-    # 크롤링한 JSON 파일 경로
-    json_file_path = "./crawler/data/deu_notices_parsed.json"
+    crawled_data = []
 
-    try:
-        # JSON 파일 읽기
-        with open(json_file_path, "r", encoding="utf-8") as f:
-            crawled_data = json.load(f)
+    # 두 개의 JSON 파일을 순회하며 데이터를 하나로 합칩니다.
+    for file_path in JSON_FILES:
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                crawled_data.extend(json.load(f))
+        else:
+            print(f"⚠️ [경고] {file_path} 파일을 찾을 수 없습니다. 건너뜁니다.")
 
+    if not crawled_data:
+        # 파일이 둘 다 없으면 빈 DB 생성
+        print("⚠️ [경고] 파싱된 JSON 파일이 하나도 없습니다! 일단 '빈 DB'로 서버를 실행합니다.")
+        print("⚠️ 서버가 켜진 상태에서 'python run_pipeline.py'를 실행해 DB를 채워주세요!")
+        vectorstore = Chroma(
+            embedding_function=OpenAIEmbeddings(),
+            persist_directory=DB_DIR
+        )
+    else:
         # JSON 데이터를 LangChain Document 객체로 변환
         docs = []
         for item in crawled_data:
@@ -63,7 +80,7 @@ else:
             )
             docs.append(doc)
 
-        print(f"총 {len(docs)}개의 공지사항을 Document로 변환했습니다. 청크 분할을 시작합니다...")
+        print(f"총 {len(docs)}개의 공지사항(대표+DAP)을 Document로 변환했습니다. 청크 분할을 시작합니다...")
 
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
         splits = text_splitter.split_documents(docs)
@@ -75,16 +92,6 @@ else:
             persist_directory=DB_DIR
         )
         print("✅ JSON 데이터 기반 벡터 DB 로컬 저장 완료!")
-
-    except FileNotFoundError:
-        # 파일이 없으면 에러를 뿜는 대신 빈 DB를 만들고 서버를 켭니다!
-        print("⚠️ [경고] 파싱된 JSON 파일이 없습니다! 일단 '빈 DB'로 서버를 실행합니다.")
-        print("⚠️ 서버가 켜진 상태에서 'python run_pipeline.py'를 실행해 DB를 채워주세요!")
-
-        vectorstore = Chroma(
-            embedding_function=OpenAIEmbeddings(),
-            persist_directory=DB_DIR
-        )
 
 
 # 검색 결과 개수 10개
@@ -146,13 +153,18 @@ async def ask_ai(request: QuestionRequest):
 async def update_database():
     print("🔄 DB 업데이트 요청을 받았습니다! 최신 데이터를 읽어옵니다...")
 
-    json_file_path = "./crawler/data/deu_notices_parsed.json"
+    crawled_data = []
 
-    if not os.path.exists(json_file_path):
-        return {"error": "파싱된 JSON 파일을 찾을 수 없습니다."}
+    # 🌟 파일 목록을 순회하며 대표 홈페이지와 DAP 데이터를 모두 긁어모읍니다.
+    for file_path in JSON_FILES:
+        if os.path.exists(file_path):
+            with open(file_path, "r", encoding="utf-8") as f:
+                crawled_data.extend(json.load(f))
+        else:
+            print(f"⚠️ [경고] {file_path} 파일을 찾을 수 없습니다. 건너뜁니다.")
 
-    with open(json_file_path, "r", encoding="utf-8") as f:
-        crawled_data = json.load(f)
+    if not crawled_data:
+        return {"error": "파싱된 JSON 파일을 하나도 찾을 수 없습니다."}
 
     # 1. 업데이트 전 기존 DB의 조각(Chunk) 개수 확인
     old_count = vectorstore._collection.count()
@@ -177,7 +189,6 @@ async def update_database():
     splits = text_splitter.split_documents(docs)
 
     # 4. 핵심: 중복 저장을 막기 위한 '고유 ID' 생성
-    # 같은 공지사항이라도 조각이 여러 개 날 수 있으므로 "링크_조각번호" 형태로 ID를 만듭니다.
     ids = []
     chunk_counters = {}
     for split in splits:
@@ -187,7 +198,6 @@ async def update_database():
         ids.append(chunk_id)
 
     # 5. DB에 덮어쓰기 (Upsert)
-    # ChromaDB는 이미 존재하는 ID가 들어오면 무시하거나 덮어쓰고, 새로운 ID만 새로 추가합니다!
     vectorstore.add_documents(documents=splits, ids=ids)
 
     # 6. 업데이트 후 늘어난 개수 계산

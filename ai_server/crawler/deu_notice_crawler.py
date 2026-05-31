@@ -13,7 +13,7 @@ import sys
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 ATTACHMENT_DIR = os.path.join(DATA_DIR, "attachments")
-STATUS_FILE = os.path.join(DATA_DIR, "update_status.json") # 상태 저장 파일 경로
+STATUS_FILE = os.path.join(DATA_DIR, "deu_update_status.json") # 상태 저장 파일 경로
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(ATTACHMENT_DIR, exist_ok=True)
@@ -65,27 +65,28 @@ def get_notice_content(url):
                         attachments.append({"file_name": img_file_name, "file_path": img_file_path})
 
             # 일반 첨부파일 다운로드
-            file_area = soup.select_one('.file')
-            if file_area:
-                for a_tag in file_area.select('a'):
-                    file_name = a_tag.get_text(strip=True)
-                    file_href = a_tag.get('href')
-
-                    if not file_href or file_href == "#" or "첨부파일" in file_name:
-                        continue
-
-                    download_url = urllib.parse.urljoin(url, file_href)
-                    safe_file_name = file_name.replace("/", "_").replace("\\", "_")
-                    file_path = os.path.join(ATTACHMENT_DIR, safe_file_name)
-
-                    if not os.path.exists(file_path):
-                        print(f"      ⬇️ 첨부파일 다운로드 중: {safe_file_name}")
-                        file_response = requests.get(download_url, headers=headers)
-                        if file_response.status_code == 200:
-                            with open(file_path, 'wb') as f:
-                                f.write(file_response.content)
-
-                    attachments.append({"file_name": safe_file_name, "file_path": file_path})
+            # (현재는 본문 이미지 다운로드만 활성화되어 있지만, 필요하다면 아래 코드의 주석을 해제하여 일반 첨부파일도 다운로드할 수 있습니다.)
+            # file_area = soup.select_one('.file')
+            # if file_area:
+            #     for a_tag in file_area.select('a'):
+            #         file_name = a_tag.get_text(strip=True)
+            #         file_href = a_tag.get('href')
+            #
+            #         if not file_href or file_href == "#" or "첨부파일" in file_name:
+            #             continue
+            #
+            #         download_url = urllib.parse.urljoin(url, file_href)
+            #         safe_file_name = file_name.replace("/", "_").replace("\\", "_")
+            #         file_path = os.path.join(ATTACHMENT_DIR, safe_file_name)
+            #
+            #         if not os.path.exists(file_path):
+            #             print(f"      ⬇️ 첨부파일 다운로드 중: {safe_file_name}")
+            #             file_response = requests.get(download_url, headers=headers)
+            #             if file_response.status_code == 200:
+            #                 with open(file_path, 'wb') as f:
+            #                     f.write(file_response.content)
+            #
+            #         attachments.append({"file_name": safe_file_name, "file_path": file_path})
 
             return markdown_text, attachments
     except Exception as e:
