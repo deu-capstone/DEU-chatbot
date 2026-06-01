@@ -4,230 +4,411 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>동의대 학사 상담 챗봇</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
     <style>
-        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f6; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-
-        /* 전체 틀: 사이드바와 채팅창을 나란히 배치 */
-        .main-wrapper { display: flex; width: 850px; height: 650px; background-color: white; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); overflow: hidden; }
-
-        /* 왼쪽 사이드바 영역 */
-        .sidebar { width: 300px; background-color: #f8f9fa; border-right: 1px solid #ddd; display: flex; flex-direction: column; }
-        .sidebar-header { background-color: #00305b; color: white; padding: 15px; text-align: center; font-size: 1.1em; font-weight: bold; }
-        .sidebar-content { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; }
-
-        /* 추천 리스트 공통 스타일 */
-        .recommend-section h4 { margin: 0 0 10px 0; font-size: 1em; color: #00305b; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
-        .recommend-list { list-style: none; padding: 0; margin: 0; font-size: 0.85em; }
-        .recommend-list li { margin-bottom: 8px; line-height: 1.3; }
-        .recommend-list a { color: #333; text-decoration: none; }
-        .recommend-list a:hover { color: #00305b; font-weight: bold; text-decoration: underline; }
-        .loading-text { font-size: 0.85em; color: #777; }
-
-        /* 학과 입력부 */
-        .dept-input-group { display: flex; gap: 5px; margin-bottom: 10px; }
-        .dept-input-group input { flex: 1; padding: 5px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.9em; }
-        .dept-input-group button { background-color: #00305b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.9em; }
-
-        /* 오른쪽 채팅창 영역 */
-        .chat-container { flex: 1; display: flex; flex-direction: column; background-color: white; }
-        .chat-header { background-color: #004080; color: white; padding: 15px; text-align: center; font-size: 1.1em; font-weight: bold; }
-        .chat-box { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-
-        /* 말풍선 스타일 */
-        .message { max-width: 80%; padding: 10px 15px; border-radius: 15px; line-height: 1.4; font-size: 0.95em; }
-        .msg-user { background-color: #e1f5fe; color: #000; align-self: flex-end; border-bottom-right-radius: 2px; }
-        .msg-bot { background-color: #f1f0f0; color: #333; align-self: flex-start; border-bottom-left-radius: 2px; white-space: pre-wrap; }
-
-        /* 입력창 영역 */
-        .chat-input-area { display: flex; padding: 15px; border-top: 1px solid #ddd; background-color: #fafafa; }
-        .chat-input-area input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; font-size: 1em; }
-        .chat-input-area button { background-color: #004080; color: white; border: none; padding: 10px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body { font-family: 'Malgun Gothic', sans-serif; }
     </style>
 </head>
-<body>
+<body class="flex justify-center items-center h-screen bg-slate-100 p-4 text-sm">
 
-<div class="main-wrapper">
-    <div class="sidebar">
-        <div class="sidebar-header">⭐ 맞춤형 추천 공지</div>
-        <div class="sidebar-content">
+<div class="w-full max-w-4xl h-full max-h-[820px] bg-white rounded-2xl shadow-2xl flex flex-row overflow-hidden border border-blue-100 relative">
 
-            <div class="recommend-section">
-                <h4>🎓 내 학과 공지사항</h4>
-                <div class="dept-input-group">
-                    <input type="text" id="deptInput" placeholder="학과 입력 (예: 소프트웨어)">
-                    <button onclick="saveAndFetchDept()">적용</button>
+    <aside class="w-72 bg-slate-50 border-r border-slate-200 flex flex-col z-10 hidden md:flex">
+        <div class="bg-slate-100 text-slate-800 px-5 py-4 border-b border-slate-200 font-bold flex items-center">
+            <i data-lucide="star" class="w-4 h-4 mr-2 text-yellow-500 fill-yellow-500"></i> 맞춤형 추천 공지
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-5 space-y-6">
+            <div>
+                <h4 class="text-sm font-bold text-blue-900 mb-3 flex items-center border-b border-slate-200 pb-2">
+                    <i data-lucide="graduation-cap" class="w-4 h-4 mr-1.5"></i> 내 학과 공지사항
+                </h4>
+
+                <div id="deptLoginNotice" class="text-xs mb-2 hidden"></div>
+                <div id="deptInputContainer" class="flex space-x-1 mb-3">
+                    <input type="text" id="deptInput" placeholder="학과 입력 (예: 소프트웨어)" class="flex-1 px-2 py-1.5 text-xs border border-slate-300 rounded focus:outline-none focus:border-blue-500">
+                    <button onclick="fetchSidebarRecommendations()" class="px-2 py-1.5 bg-blue-600 text-white text-xs rounded hover:bg-blue-700">적용</button>
                 </div>
-                <ul class="recommend-list" id="deptRecommendList">
-                    <li class="loading-text">학과를 입력하면 맞춤 공지를 찾아드립니다.</li>
+
+                <ul id="deptRecommendList" class="space-y-2.5">
+                    <li class="text-xs text-slate-500">학과를 입력하거나 로그인해주세요.</li>
                 </ul>
             </div>
 
-            <div class="recommend-section">
-                <h4>⏱️ 최근 관심사 추천</h4>
-                <ul class="recommend-list" id="historyRecommendList">
-                    <li class="loading-text">채팅으로 질문을 남기면 관심사를 분석해 드립니다.</li>
+            <div>
+                <h4 class="text-sm font-bold text-blue-900 mb-3 flex items-center border-b border-slate-200 pb-2">
+                    <i data-lucide="history" class="w-4 h-4 mr-1.5"></i> 최근 관심사 추천
+                </h4>
+                <ul id="historyRecommendList" class="space-y-2.5">
+                    <li class="text-xs text-slate-500">질문을 남기면 관심사를 분석해 드립니다.</li>
                 </ul>
             </div>
+        </div>
+    </aside>
 
+    <div class="flex-1 flex flex-col relative">
+        <header class="bg-blue-600 text-white px-5 py-4 flex items-center justify-between shadow-md z-10">
+            <div class="flex items-center space-x-2">
+                <i data-lucide="user-circle" class="w-7 h-7 text-blue-100"></i>
+                <div id="headerUserInfo">
+                    <span class="font-semibold text-base">게스트 사용자</span>
+                </div>
+            </div>
+            <div class="flex items-center justify-end space-x-2">
+                <button onclick="handleOpenHistory()" class="p-2 hover:bg-blue-700 rounded-full transition-colors flex items-center justify-center" title="저장된 채팅 기록 열람">
+                    <i data-lucide="clock" class="w-[18px] h-[18px]"></i>
+                </button>
+                <div class="w-[1px] h-4 bg-blue-300 self-center opacity-60"></div>
+                <div id="headerAuthArea">
+                    <button onclick="triggerGoogleSignIn()" class="flex items-center space-x-1.5 px-3 py-1.5 bg-white text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-xs font-bold shadow-sm">
+                        <i data-lucide="log-in" class="w-3.5 h-3.5"></i><span>학생 로그인</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50 relative scroll-smooth" id="chatBox">
+            <div class="absolute inset-0 pointer-events-none flex items-center justify-center bg-no-repeat bg-center" style="background-image: url('../assets/symbol_basic.jpg'); background-size: 240px; opacity: 0.08;"></div>
+            <div id="messagesContainer" class="relative z-10 space-y-4"></div>
+            <div id="typingIndicator" class="flex items-start hidden fade-in">
+                <div class="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-tl-none shadow-sm flex space-x-1.5">
+                    <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 100ms"></div>
+                    <div class="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style="animation-delay: 200ms"></div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="bg-white border-t border-slate-200 p-4 flex flex-col space-y-3 shadow-md z-10">
+            <form onsubmit="event.preventDefault(); handleSendMessageSubmit();" class="flex items-center bg-slate-100 rounded-xl overflow-hidden border border-slate-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                <input type="text" id="userInput" placeholder="질문을 입력해주세요..." class="flex-1 bg-transparent px-4 py-3 outline-none text-slate-800 placeholder-slate-400 text-sm" oninput="checkInput()">
+                <button type="submit" id="sendBtn" disabled class="p-3 text-slate-400 hover:text-blue-800 transition-colors">
+                    <i data-lucide="send" class="w-5 h-5" id="sendIcon"></i>
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <div id="googleModal" class="absolute inset-0 bg-black/50 z-50 flex justify-center items-center p-4 hidden fade-in">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl border border-slate-200 p-6 flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="font-bold text-slate-900 text-base flex items-center">
+                    <i data-lucide="lock" class="w-[18px] h-[18px] text-blue-600 mr-2"></i> 로그인 인증센터
+                </h3>
+                <button onclick="closeGoogleModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="flex flex-col items-center py-4">
+                <span class="block text-xs font-bold text-blue-600 mb-4 self-start">🔘 원클릭 구글 계정 인증</span>
+                <div id="google-visible-btn" class="w-full flex justify-center py-1 min-h-[40px]"></div>
+                <p class="text-[11px] text-slate-400 mt-6 text-center leading-relaxed">동의대학교 G-Suite 학교 공식 계정(@g.deu.ac.kr)을 통해 로그인합니다.</p>
+            </div>
+            <div class="mt-4 pt-2 border-t border-slate-100 flex justify-end">
+                <button type="button" onclick="closeGoogleModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-semibold rounded-xl text-xs transition-colors">닫기</button>
+            </div>
         </div>
     </div>
 
-    <div class="chat-container">
-        <div class="chat-header">💬 동의대 학사 상담 챗봇</div>
-
-        <div class="chat-box" id="chatBox">
-            <div class="message msg-bot">안녕하세요! 동의대학교 학사 안내 챗봇입니다. 궁금한 점을 편하게 물어보세요!</div>
-        </div>
-
-        <div class="chat-input-area">
-            <input type="text" id="userInput" placeholder="질문을 입력하세요..." onkeypress="handleEnter(event)">
-            <button onclick="sendMessage()">전송</button>
+    <div id="historyModal" class="absolute inset-0 bg-black/40 z-50 flex justify-center items-center p-4 hidden fade-in">
+        <div class="bg-white w-full max-w-md max-h-[80%] rounded-2xl shadow-xl flex flex-col overflow-hidden">
+            <div class="flex justify-between items-center p-4 border-b border-slate-200 bg-blue-50">
+                <h3 class="font-bold text-blue-900 flex items-center"><i data-lucide="clock" class="w-[18px] h-[18px] mr-2"></i> 저장된 채팅 기록</h3>
+                <div class="flex items-center space-x-2">
+                    <button onclick="handleDeleteHistory()" class="text-[11px] bg-red-50 text-red-600 border border-red-200 px-2 py-1 rounded flex items-center">
+                        <i data-lucide="trash-2" class="w-3 h-3 mr-1"></i>전체 삭제
+                    </button>
+                    <button onclick="closeHistoryModal()" class="text-slate-500 hover:text-slate-700 bg-white p-1 rounded-full"><i data-lucide="x" class="w-[18px] h-[18px]"></i></button>
+                </div>
+            </div>
+            <div id="historyContainer" class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50"></div>
         </div>
     </div>
 </div>
 
 <script>
-    const chatBox = document.getElementById('chatBox');
-    const userInput = document.getElementById('userInput');
+    // 발급받으신 클라이언트 ID를 그대로 유지해주세요!
+    const GOOGLE_CLIENT_ID = "838836728378-ksj7pt3ppns3a6887qvvk5ktsqcsme8p.apps.googleusercontent.com";
 
-    // 페이지 로드 시 초기화 작업
-    window.onload = function() {
-        // 저장된 학과가 있으면 불러오기
-        const savedDept = localStorage.getItem('userDept');
-        if (savedDept) {
-            document.getElementById('deptInput').value = savedDept;
-            fetchDeptRecommendations(savedDept);
+    let currentUser = null;
+    let messages = [];
+    let isTypingStatus = false;
+
+    const FAQ_LIST = ["학사일정이 어떻게 되나요?", "장학금 신청 절차를 알려주세요.", "수강신청 정정 기간은 언제인가요?", "학생증 재발급은 어디서 하나요?"];
+
+    function refreshIcons() { lucide.createIcons(); }
+    function scrollToBottom() { const b = document.getElementById('chatBox'); b.scrollTop = b.scrollHeight; }
+
+    function renderHeader() {
+        const userInfo = document.getElementById('headerUserInfo');
+        const authArea = document.getElementById('headerAuthArea');
+        if (currentUser) {
+            userInfo.innerHTML = `
+                    <div class="flex flex-col">
+                        <span class="font-bold text-base leading-snug">${currentUser.fullName}</span>
+                        <span class="text-[11px] text-blue-200 mt-0.5">${currentUser.email}</span>
+                    </div>`;
+            authArea.innerHTML = `
+                    <button onclick="handleLogout()" class="flex items-center space-x-1 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 rounded-lg transition-colors text-xs font-semibold text-white">
+                        <i data-lucide="log-out" class="w-3.5 h-3.5"></i><span>로그아웃</span>
+                    </button>`;
+        } else {
+            userInfo.innerHTML = `<span class="font-semibold text-base">게스트 사용자</span>`;
+            authArea.innerHTML = `
+                    <button onclick="triggerGoogleSignIn()" class="flex items-center space-x-1.5 px-3 py-1.5 bg-white text-blue-600 hover:bg-blue-50 rounded-lg transition-colors text-xs font-bold shadow-sm">
+                        <i data-lucide="log-in" class="w-3.5 h-3.5"></i><span>학생 로그인</span>
+                    </button>`;
         }
-        // 저장된 검색 기록으로 추천 불러오기
-        fetchHistoryRecommendations();
+        refreshIcons();
+        fetchSidebarRecommendations(); // 로그인 상태가 변할 때 사이드바도 갱신!
+    }
+
+    function renderMessages() {
+        const container = document.getElementById('messagesContainer');
+        container.innerHTML = '';
+        messages.forEach(msg => {
+            const isUser = msg.sender === 'user';
+            let html = `
+                    <div class="flex flex-col fade-in">
+                        <div class="flex flex-col ${isUser ? 'items-end' : 'items-start'}">
+                            <div class="max-w-[85%] px-4 py-2.5 rounded-2xl shadow-sm ${isUser ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white text-slate-800 border border-slate-200 rounded-tl-none'}">
+                                <p class="whitespace-pre-wrap leading-relaxed">${msg.text}</p>
+                            </div>
+                            <span class="text-[10px] text-slate-400 mt-1 px-1">${msg.timestamp}</span>
+                        </div>
+                `;
+            if (msg.id === 'welcome') {
+                html += `
+                        <div class="mt-4 p-4 bg-white border border-blue-100 rounded-xl shadow-sm space-y-2 max-w-[90%] self-start fade-in">
+                            <p class="text-xs font-bold text-blue-600 mb-2 flex items-center">💡 자주 묻는 질문 항목</p>
+                            <div class="grid grid-cols-1 gap-2">
+                                ${FAQ_LIST.map(faq => `
+                                    <button onclick="handleSendMessage('${faq}')" class="text-left w-full bg-slate-50 hover:bg-blue-50 text-slate-700 border border-slate-200 px-3 py-2 rounded-lg text-xs transition-all flex justify-between">
+                                        <span>${faq}</span><i data-lucide="chevron-right" class="w-3.5 h-3.5 opacity-60 text-blue-500"></i>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>`;
+            }
+            html += `</div>`;
+            container.insertAdjacentHTML('beforeend', html);
+        });
+        refreshIcons();
+        scrollToBottom();
+        fetchSidebarRecommendations(); // 채팅을 칠 때마다 관심사 추천 갱신!
+    }
+
+    function checkInput() {
+        const input = document.getElementById('userInput').value.trim();
+        const btn = document.getElementById('sendBtn');
+        const icon = document.getElementById('sendIcon');
+        if (input && !isTypingStatus) {
+            btn.disabled = false; btn.classList.add('text-blue-600'); btn.classList.remove('text-slate-400'); icon.style.fill = 'currentColor';
+        } else {
+            btn.disabled = true; btn.classList.remove('text-blue-600'); btn.classList.add('text-slate-400'); icon.style.fill = 'none';
+        }
+    }
+
+    // 🌟 [핵심] 사이드바 맞춤형 공지사항 불러오기
+    async function fetchSidebarRecommendations() {
+        const deptList = document.getElementById('deptRecommendList');
+        const historyList = document.getElementById('historyRecommendList');
+
+        // 1. 학과 추천 로직 (로그인 시 이름 통째로 사용, 비로그인 시 입력창 사용)
+        let deptQuery = "";
+        if (currentUser) {
+            deptQuery = currentUser.fullName; // 예: "홍길동소프트웨어공학" -> 벡터DB가 찰떡같이 알아듣습니다!
+            document.getElementById('deptInputContainer').style.display = 'none';
+            document.getElementById('deptLoginNotice').innerHTML = `<span class="font-bold text-blue-600">${currentUser.fullName}</span> 관련 맞춤 공지`;
+            document.getElementById('deptLoginNotice').style.display = 'block';
+        } else {
+            deptQuery = document.getElementById('deptInput').value.trim();
+            document.getElementById('deptInputContainer').style.display = 'flex';
+            document.getElementById('deptLoginNotice').style.display = 'none';
+        }
+
+        if (deptQuery) {
+            deptList.innerHTML = '<li class="text-xs text-slate-400 animate-pulse">공지사항 탐색 중...</li>';
+            try {
+                const res = await fetch('/api/recommend', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ department: deptQuery, history: [] })
+                });
+                const data = await res.json();
+                if(data.recommendations && data.recommendations.length > 0) {
+                    deptList.innerHTML = data.recommendations.map(item => `<li><a href="${item.link}" target="_blank" class="text-xs text-slate-700 hover:text-blue-600 hover:underline block leading-relaxed line-clamp-2">📄 ${item.title}</a></li>`).join('');
+                } else {
+                    deptList.innerHTML = '<li class="text-xs text-slate-500">최근 관련된 공지가 없습니다.</li>';
+                }
+            } catch(e) { deptList.innerHTML = '<li class="text-xs text-red-500">추천 서버 연결 실패</li>'; }
+        }
+
+        // 2. 검색 기록(관심사) 추천 로직
+        const userMessages = messages.filter(m => m.sender === 'user').map(m => m.text).slice(-5); // 최근 5개만
+        if (userMessages.length > 0) {
+            historyList.innerHTML = '<li class="text-xs text-slate-400 animate-pulse">관심사 분석 중...</li>';
+            try {
+                const res = await fetch('/api/recommend', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ department: "", history: userMessages })
+                });
+                const data = await res.json();
+                if(data.recommendations && data.recommendations.length > 0) {
+                    historyList.innerHTML = data.recommendations.map(item => `<li><a href="${item.link}" target="_blank" class="text-xs text-slate-700 hover:text-blue-600 hover:underline block leading-relaxed line-clamp-2">💡 ${item.title}</a></li>`).join('');
+                } else {
+                    historyList.innerHTML = '<li class="text-xs text-slate-500">최근 관련된 공지가 없습니다.</li>';
+                }
+            } catch(e) { historyList.innerHTML = '<li class="text-xs text-red-500">추천 서버 연결 실패</li>'; }
+        }
+    }
+
+    async function handleSendMessage(text) {
+        if (!text.trim() || isTypingStatus) return;
+
+        // 사용자 메세지 화면에 즉시 렌더링
+        messages.push({
+            id: Date.now(), sender: 'user', text: text,
+            timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        });
+        document.getElementById('userInput').value = '';
+        checkInput();
+        renderMessages();
+
+        isTypingStatus = true;
+        document.getElementById('typingIndicator').classList.remove('hidden');
+        scrollToBottom();
+
+        try {
+            // Spring Boot 메인 서버(/api/chat)로 POST 전송 (DB 저장 + 파이썬 AI 연동)
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    message: text,
+                    email: currentUser ? currentUser.email : "guest@deu.ac.kr",
+                    fullName: currentUser ? currentUser.fullName : "게스트"
+                })
+            });
+
+            if(!response.ok) throw new Error("서버 오류");
+            const botResponse = await response.json();
+            messages.push(botResponse);
+
+        } catch(e) {
+            messages.push({
+                id: Date.now(), sender: 'bot', text: '서버와 연결할 수 없습니다. 잠시 후 다시 시도해주세요.',
+                timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+            });
+        } finally {
+            isTypingStatus = false;
+            document.getElementById('typingIndicator').classList.add('hidden');
+            renderMessages();
+        }
+    }
+
+    function handleSendMessageSubmit() { handleSendMessage(document.getElementById('userInput').value); }
+
+    // --- 구글 로그인 로직 ---
+    function triggerGoogleSignIn() {
+        document.getElementById('googleModal').classList.remove('hidden');
+        if (window.google && google.accounts) {
+            google.accounts.id.renderButton(document.getElementById("google-visible-btn"), { theme: "filled_blue", size: "large", width: "320" });
+        }
+    }
+    function closeGoogleModal() { document.getElementById('googleModal').classList.add('hidden'); }
+
+    async function handleGoogleCredentialResponse(response) {
+        if (!response.credential) return;
+        const base64Url = response.credential.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(decodeURIComponent(window.atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+
+        if (!payload.email.endsWith("@g.deu.ac.kr")) { alert("학교 구글 G-Suite 계정(@g.deu.ac.kr)만 사용할 수 있습니다."); return; }
+
+        // Spring Boot 로그인 세션 저장 API 호출
+        try {
+            await fetch('/api/auth/google', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email: payload.email, fullName: payload.name, username: payload.email.split('@')[0] })
+            });
+        } catch(e) { console.warn("DB 로그인 연동 실패", e); }
+
+        currentUser = { email: payload.email, username: payload.email.split('@')[0], fullName: payload.name };
+        closeGoogleModal();
+        renderHeader();
+        messages.push({
+            id: Date.now(), sender: 'bot', text: `${currentUser.fullName}님, 로그인이 완료되었습니다! 이제 맞춤형 공지사항이 제공됩니다.`,
+            timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        });
+        renderMessages();
+    }
+
+    function handleLogout() {
+        currentUser = null;
+        renderHeader();
+        messages.push({
+            id: Date.now(), sender: 'bot', text: '로그아웃 되었습니다. 게스트 모드로 전환됩니다.',
+            timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        });
+        renderMessages();
+    }
+
+    // --- 채팅 기록 열람 (DB 연동) ---
+    async function handleOpenHistory() {
+        if (!currentUser) return alert("학생 로그인이 필요합니다.");
+        document.getElementById('historyModal').classList.remove('hidden');
+        const container = document.getElementById('historyContainer');
+        container.innerHTML = '<div class="text-center py-10 text-slate-400 animate-pulse">DB에서 기록을 불러오는 중...</div>';
+
+        try {
+            const res = await fetch(`/api/chat/history?email=${encodeURIComponent(currentUser.email)}`);
+            const history = await res.json();
+
+            if(history.length === 0) {
+                container.innerHTML = '<div class="text-center py-10 text-slate-400">저장된 채팅 기록이 없습니다.</div>';
+            } else {
+                container.innerHTML = history.map(msg => `
+                        <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-xs font-bold ${msg.sender === 'user' ? 'text-blue-600' : 'text-slate-700'}">${msg.sender === 'user' ? '나의 질문' : '챗봇 답변'}</span>
+                                <span class="text-[10px] text-slate-400">${msg.timestamp}</span>
+                            </div>
+                            <p class="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">${msg.text}</p>
+                        </div>
+                    `).join('');
+            }
+        } catch(e) { container.innerHTML = '<div class="text-center py-10 text-red-400">기록을 불러오지 못했습니다.</div>'; }
+    }
+    function closeHistoryModal() { document.getElementById('historyModal').classList.add('hidden'); }
+    async function handleDeleteHistory() {
+        if(!currentUser || !confirm("모든 기록을 삭제하시겠습니까?")) return;
+        await fetch(`/api/chat/history?email=${encodeURIComponent(currentUser.email)}`, { method: 'DELETE' });
+        alert("삭제되었습니다."); closeHistoryModal();
+    }
+
+    window.onload = () => {
+        if (window.google && google.accounts) {
+            google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredentialResponse, auto_select: false });
+        }
+        refreshIcons();
+        renderHeader();
+        messages = [{
+            id: 'welcome', sender: 'bot', text: '안녕하세요! 대학 생활과 관련하여 궁금한 사안이 있다면 언제든 말씀해 주세요.',
+            timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        }];
+        renderMessages();
     };
-
-    function handleEnter(event) {
-        if (event.key === 'Enter') sendMessage();
-    }
-
-    // ==========================================
-    // 1. 학과 추천 로직
-    // ==========================================
-    function saveAndFetchDept() {
-        const dept = document.getElementById('deptInput').value.trim();
-        if (!dept) return;
-
-        localStorage.setItem('userDept', dept);
-        fetchDeptRecommendations(dept);
-    }
-
-    async function fetchDeptRecommendations(dept) {
-        const listEl = document.getElementById('deptRecommendList');
-        listEl.innerHTML = '<li class="loading-text">학과 공지를 찾고 있습니다...</li>';
-
-        try {
-            // 파이썬 코드가 if (department)를 먼저 검사하므로 history는 비워서 보냅니다.
-            const response = await fetch('/api/recommend', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ department: dept, history: [] })
-            });
-            const data = await response.json();
-
-            if (!data.recommendations || data.recommendations.length === 0) {
-                listEl.innerHTML = '<li class="loading-text">최근 6개월 내 관련 공지가 없습니다.</li>';
-                return;
-            }
-
-            listEl.innerHTML = '';
-            data.recommendations.forEach(item => {
-                listEl.innerHTML += `<li><a href="${item.link}" target="_blank">📄 ${item.title}</a></li>`;
-            });
-        } catch (error) {
-            listEl.innerHTML = '<li class="loading-text">서버 연결 실패</li>';
-        }
-    }
-
-    // ==========================================
-    // 2. 검색 기록 추천 로직
-    // ==========================================
-    function saveSearchHistory(question) {
-        let history = JSON.parse(localStorage.getItem('chatHistory')) || [];
-        history.push(question);
-        if (history.length > 5) history.shift();
-        localStorage.setItem('chatHistory', JSON.stringify(history));
-    }
-
-    async function fetchHistoryRecommendations() {
-        const history = JSON.parse(localStorage.getItem('chatHistory')) || [];
-        const listEl = document.getElementById('historyRecommendList');
-
-        if (history.length === 0) {
-            listEl.innerHTML = '<li class="loading-text">채팅창에 질문을 남겨보세요!</li>';
-            return;
-        }
-
-        listEl.innerHTML = '<li class="loading-text">관심사를 분석 중입니다...</li>';
-
-        try {
-            // 이번엔 history만 채워서 보냅니다.
-            const response = await fetch('/api/recommend', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ department: "", history: history })
-            });
-            const data = await response.json();
-
-            if (!data.recommendations || data.recommendations.length === 0) {
-                listEl.innerHTML = '<li class="loading-text">관련된 추천 공지가 없습니다.</li>';
-                return;
-            }
-
-            listEl.innerHTML = '';
-            data.recommendations.forEach(item => {
-                listEl.innerHTML += `<li><a href="${item.link}" target="_blank">💡 ${item.title}</a></li>`;
-            });
-        } catch (error) {
-            listEl.innerHTML = '<li class="loading-text">서버 연결 실패</li>';
-        }
-    }
-
-    // ==========================================
-    // 3. 챗봇 채팅 로직
-    // ==========================================
-    async function sendMessage() {
-        const text = userInput.value.trim();
-        if (!text) return;
-
-        appendMessage(text, 'msg-user');
-
-        // 질문을 할 때마다 검색 기록을 저장하고, 즉시 왼쪽 아래 추천 리스트를 갱신합니다!
-        saveSearchHistory(text);
-        fetchHistoryRecommendations();
-
-        userInput.value = '';
-
-        const loadingMsgId = appendMessage("답변을 찾고 있습니다...", 'msg-bot');
-
-        try {
-            const response = await fetch(`/test-ai?msg=${encodeURIComponent(text)}`);
-            const answer = await response.text();
-            document.getElementById(loadingMsgId).innerText = answer;
-        } catch (error) {
-            document.getElementById(loadingMsgId).innerText = "❌ 서버와 연결할 수 없습니다.";
-        }
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-    function appendMessage(text, className) {
-        const msgDiv = document.createElement('div');
-        msgDiv.className = `message ${className}`;
-        msgDiv.innerText = text;
-
-        const id = 'msg-' + Date.now();
-        msgDiv.id = id;
-
-        chatBox.appendChild(msgDiv);
-        chatBox.scrollTop = chatBox.scrollHeight;
-        return id;
-    }
 </script>
-
 </body>
 </html>

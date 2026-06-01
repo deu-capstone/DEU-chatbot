@@ -51,10 +51,4 @@ public class TestController {
 
         return sb.toString();
     }
-
-    @PostMapping("/api/recommend")
-    public RecommendResponse getRecommendByHistory(@RequestBody RecommendRequest request) {
-        // 프론트엔드에서 보낸 JSON(학과, 검색기록 리스트)을 그대로 파이썬 서버로 토스!
-        return aiService.getRecommendationsFromFastApi(request.department(), request.history());
-    }
 }
