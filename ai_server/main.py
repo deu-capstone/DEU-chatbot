@@ -27,10 +27,9 @@ app = FastAPI(title="동의대 RAG 챗봇 서버")
 # =====================================================================
 DB_DIR = "./chroma_db"  # DB를 저장할 폴더 이름
 
-# 🌟 읽어올 파싱 데이터 파일 목록 (대표홈페이지 + DAP홈페이지)
+# 읽어올 파싱 데이터 파일 목록 (대표 홈페이지 단독)
 JSON_FILES = [
-    "./crawler/data/deu_notices_parsed.json",
-    "./crawler/data/dap_notices_parsed.json"
+    "./crawler/data/deu_notices_parsed.json"
 ]
 
 # 1. 만약 기존에 만들어둔 DB 폴더가 있다면? -> 1초 만에 불러오기
@@ -47,7 +46,7 @@ else:
 
     crawled_data = []
 
-    # 두 개의 JSON 파일을 순회하며 데이터를 하나로 합칩니다.
+    # JSON 파일을 순회하며 데이터를 합칩니다.
     for file_path in JSON_FILES:
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:
@@ -56,7 +55,7 @@ else:
             print(f"⚠️ [경고] {file_path} 파일을 찾을 수 없습니다. 건너뜁니다.")
 
     if not crawled_data:
-        # 파일이 둘 다 없으면 빈 DB 생성
+        # 파일이 없으면 빈 DB 생성
         print("⚠️ [경고] 파싱된 JSON 파일이 하나도 없습니다! 일단 '빈 DB'로 서버를 실행합니다.")
         print("⚠️ 서버가 켜진 상태에서 'python run_pipeline.py'를 실행해 DB를 채워주세요!")
         vectorstore = Chroma(
@@ -80,7 +79,7 @@ else:
             )
             docs.append(doc)
 
-        print(f"총 {len(docs)}개의 공지사항(대표+DAP)을 Document로 변환했습니다. 청크 분할을 시작합니다...")
+        print(f"총 {len(docs)}개의 공지사항을 Document로 변환했습니다. 청크 분할을 시작합니다...")
 
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=300)
         splits = text_splitter.split_documents(docs)
@@ -155,7 +154,7 @@ async def update_database():
 
     crawled_data = []
 
-    # 🌟 파일 목록을 순회하며 대표 홈페이지와 DAP 데이터를 모두 긁어모읍니다.
+    # 🌟 파일 목록을 순회하며 대표 홈페이지 데이터를 읽어옵니다.
     for file_path in JSON_FILES:
         if os.path.exists(file_path):
             with open(file_path, "r", encoding="utf-8") as f:

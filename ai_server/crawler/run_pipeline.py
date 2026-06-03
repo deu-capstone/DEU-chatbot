@@ -40,21 +40,20 @@ def run_step(command, description):
 def main():
     print("🔔 [자동 업데이트] 전체 파이프라인을 시작합니다.")
 
-    # 1. 크롤링 (대표 홈페이지 & DAP 동시 진행)
+    # 1. 크롤링 (대표 홈페이지 단독 진행)
     deu_result = run_step("crawler.deu_notice_crawler", "대표 홈페이지 새 글 크롤링")
-    dap_result = run_step("crawler.dap_notice_crawler", "학생종합홈페이지(DAP) 새 글 크롤링")
 
-    # 예외 처리 1: 둘 다 완전히 실패했을 경우
-    if deu_result == "FAIL" and dap_result == "FAIL":
-        print("\n❌ 모든 크롤링이 실패했습니다. 파이프라인을 종료합니다.")
+    # 예외 처리 1: 크롤링 실패
+    if deu_result == "FAIL":
+        print("\n❌ 크롤링이 실패했습니다. 파이프라인을 종료합니다.")
         return
 
-    # 예외 처리 2: 둘 다 새로운 글이 없을 경우
-    if deu_result == "NO_DATA" and dap_result == "NO_DATA":
-        print("\n🛑 [조기 종료] 두 사이트 모두 새로운 공지사항이 없으므로 파싱 및 DB 업데이트를 생략합니다.")
+    # 예외 처리 2: 새로운 글이 없을 경우
+    if deu_result == "NO_DATA":
+        print("\n🛑 [조기 종료] 새로운 공지사항이 없으므로 파싱 및 DB 업데이트를 생략합니다.")
         return
 
-    # 2. 첨부파일 파싱 (둘 중 하나라도 SUCCESS가 있다면 파서 실행!)
+    # 2. 첨부파일 파싱 (크롤링이 SUCCESS일 때만 실행됨)
     if run_step("crawler.attachment_parser", "첨부파일 및 이미지 OCR 파싱") != "SUCCESS":
         return
 

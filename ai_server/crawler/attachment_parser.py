@@ -204,7 +204,3 @@ if __name__ == "__main__":
     # ✅ 2. 대표 홈페이지 데이터 파싱
     print("🔵 대표 홈페이지 공지사항 첨부파일 파싱을 시작합니다...")
     parse_attachments("deu_notices.json", "deu_notices_parsed.json")
-
-    # ✅ 3. 학생종합홈페이지(DAP) 데이터 파싱
-    print("🟢 학생종합홈페이지(DAP) 공지사항 첨부파일 파싱을 시작합니다...")
-    parse_attachments("dap_notices.json", "dap_notices_parsed.json")
