@@ -142,7 +142,7 @@
     let messages = [];
     let isTypingStatus = false;
 
-    const FAQ_LIST = ["학사일정이 어떻게 되나요?", "장학금 신청 절차를 알려주세요.", "수강신청 정정 기간은 언제인가요?", "학생증 재발급은 어디서 하나요?"];
+    const FAQ_LIST = ["학사일정이 어떻게 되나요?", "장학금 신청 절차를 알려주세요.", "수강신청 정정 기간은 언제인가요?"];
 
     function refreshIcons() { lucide.createIcons(); }
     function scrollToBottom() { const b = document.getElementById('chatBox'); b.scrollTop = b.scrollHeight; }
@@ -168,7 +168,9 @@
                     </button>`;
         }
         refreshIcons();
-        fetchSidebarRecommendations(); // 로그인 상태가 변할 때 사이드바도 갱신!
+
+        // 🌟 [핵심 1] 화면이 켜지거나 로그인/로그아웃 할 때만 딱 한 번 추천 갱신!
+        fetchSidebarRecommendations();
     }
 
     function renderMessages() {
@@ -203,7 +205,7 @@
         });
         refreshIcons();
         scrollToBottom();
-        fetchSidebarRecommendations(); // 채팅을 칠 때마다 관심사 추천 갱신!
+        // 🌟 [핵심 2] 채팅 칠 때마다 추천 서버를 괴롭히지 않도록 여기서 갱신 코드 삭제함!
     }
 
     function checkInput() {
@@ -217,15 +219,15 @@
         }
     }
 
-    // 🌟 [핵심] 사이드바 맞춤형 공지사항 불러오기
+    // 🌟 [핵심 3] 추천 로직: 화면 메모리가 아니라 안전한 DB에서 무조건 꺼내오도록 업그레이드!
     async function fetchSidebarRecommendations() {
         const deptList = document.getElementById('deptRecommendList');
         const historyList = document.getElementById('historyRecommendList');
 
-        // 1. 학과 추천 로직 (로그인 시 이름 통째로 사용, 비로그인 시 입력창 사용)
+        // 1. 학과 추천 로직
         let deptQuery = "";
         if (currentUser) {
-            deptQuery = currentUser.fullName; // 예: "홍길동소프트웨어공학" -> 벡터DB가 찰떡같이 알아듣습니다!
+            deptQuery = currentUser.fullName;
             document.getElementById('deptInputContainer').style.display = 'none';
             document.getElementById('deptLoginNotice').innerHTML = `<span class="font-bold text-blue-600">${currentUser.fullName}</span> 관련 맞춤 공지`;
             document.getElementById('deptLoginNotice').style.display = 'block';
@@ -252,30 +254,48 @@
             } catch(e) { deptList.innerHTML = '<li class="text-xs text-red-500">추천 서버 연결 실패</li>'; }
         }
 
-        // 2. 검색 기록(관심사) 추천 로직
-        const userMessages = messages.filter(m => m.sender === 'user').map(m => m.text).slice(-5); // 최근 5개만
-        if (userMessages.length > 0) {
-            historyList.innerHTML = '<li class="text-xs text-slate-400 animate-pulse">관심사 분석 중...</li>';
+        // 2. 검색 기록(관심사) 추천 로직 (화면에 뜬 글씨가 아니라 DB에서 과거 기록 꺼내오기)
+        if (currentUser) {
+            historyList.innerHTML = '<li class="text-xs text-slate-400 animate-pulse">과거 관심사 분석 중...</li>';
             try {
-                const res = await fetch('/api/recommend', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ department: "", history: userMessages })
-                });
-                const data = await res.json();
-                if(data.recommendations && data.recommendations.length > 0) {
-                    historyList.innerHTML = data.recommendations.map(item => `<li><a href="${item.link}" target="_blank" class="text-xs text-slate-700 hover:text-blue-600 hover:underline block leading-relaxed line-clamp-2">💡 ${item.title}</a></li>`).join('');
+                // 2-1. DB에서 내 채팅 기록 가져오기
+                const historyRes = await fetch(`/api/chat/history?email=${encodeURIComponent(currentUser.email)}`);
+                const dbHistory = await historyRes.json();
+
+                // 2-2. 내가 했던 과거 질문들만 5개 뽑아내기
+                const pastUserMessages = dbHistory
+                    .filter(msg => msg.sender === 'user')
+                    .map(msg => msg.text)
+                    .slice(-5);
+
+                // 2-3. 분석할 과거 질문이 있다면 파이썬 AI 서버로 전송!
+                if (pastUserMessages.length > 0) {
+                    const recRes = await fetch('/api/recommend', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ department: "", history: pastUserMessages })
+                    });
+
+                    const data = await recRes.json();
+                    if(data.recommendations && data.recommendations.length > 0) {
+                        historyList.innerHTML = data.recommendations.map(item => `<li><a href="${item.link}" target="_blank" class="text-xs text-slate-700 hover:text-blue-600 hover:underline block leading-relaxed line-clamp-2">💡 ${item.title}</a></li>`).join('');
+                    } else {
+                        historyList.innerHTML = '<li class="text-xs text-slate-500">관련된 공지가 없습니다.</li>';
+                    }
                 } else {
-                    historyList.innerHTML = '<li class="text-xs text-slate-500">최근 관련된 공지가 없습니다.</li>';
+                    historyList.innerHTML = '<li class="text-xs text-slate-500">과거 질문 기록이 없습니다.</li>';
                 }
-            } catch(e) { historyList.innerHTML = '<li class="text-xs text-red-500">추천 서버 연결 실패</li>'; }
+            } catch(e) {
+                historyList.innerHTML = '<li class="text-xs text-red-500">기록을 불러오지 못했습니다.</li>';
+            }
+        } else {
+            historyList.innerHTML = '<li class="text-xs text-slate-500">로그인하시면 관심사를 분석해 드립니다.</li>';
         }
     }
 
     async function handleSendMessage(text) {
         if (!text.trim() || isTypingStatus) return;
 
-        // 사용자 메세지 화면에 즉시 렌더링
         messages.push({
             id: Date.now(), sender: 'user', text: text,
             timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -289,7 +309,6 @@
         scrollToBottom();
 
         try {
-            // Spring Boot 메인 서버(/api/chat)로 POST 전송 (DB 저장 + 파이썬 AI 연동)
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -318,7 +337,6 @@
 
     function handleSendMessageSubmit() { handleSendMessage(document.getElementById('userInput').value); }
 
-    // --- 구글 로그인 로직 ---
     function triggerGoogleSignIn() {
         document.getElementById('googleModal').classList.remove('hidden');
         if (window.google && google.accounts) {
@@ -333,9 +351,8 @@
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const payload = JSON.parse(decodeURIComponent(window.atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
 
-        if (!payload.email.endsWith("@g.deu.ac.kr")) { alert("학교 구글 G-Suite 계정(@g.deu.ac.kr)만 사용할 수 있습니다."); return; }
+        if (!payload.email.endsWith("@g.deu.ac.kr")) { alert("학교 구글 계정만 사용할 수 있습니다."); return; }
 
-        // Spring Boot 로그인 세션 저장 API 호출
         try {
             await fetch('/api/auth/google', {
                 method: 'POST',
@@ -345,17 +362,15 @@
         } catch(e) { console.warn("DB 로그인 연동 실패", e); }
 
         currentUser = { email: payload.email, username: payload.email.split('@')[0], fullName: payload.name };
+        localStorage.setItem('chatUser', JSON.stringify(currentUser));
+
         closeGoogleModal();
-        renderHeader();
-        messages.push({
-            id: Date.now(), sender: 'bot', text: `${currentUser.fullName}님, 로그인이 완료되었습니다! 이제 맞춤형 공지사항이 제공됩니다.`,
-            timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-        });
-        renderMessages();
+        renderHeader(); // 로그인 직후 여기서 딱 한 번 갱신됩니다!
     }
 
     function handleLogout() {
         currentUser = null;
+        localStorage.removeItem('chatUser');
         renderHeader();
         messages.push({
             id: Date.now(), sender: 'bot', text: '로그아웃 되었습니다. 게스트 모드로 전환됩니다.',
@@ -364,7 +379,6 @@
         renderMessages();
     }
 
-    // --- 채팅 기록 열람 (DB 연동) ---
     async function handleOpenHistory() {
         if (!currentUser) return alert("학생 로그인이 필요합니다.");
         document.getElementById('historyModal').classList.remove('hidden');
@@ -390,7 +404,9 @@
             }
         } catch(e) { container.innerHTML = '<div class="text-center py-10 text-red-400">기록을 불러오지 못했습니다.</div>'; }
     }
+
     function closeHistoryModal() { document.getElementById('historyModal').classList.add('hidden'); }
+
     async function handleDeleteHistory() {
         if(!currentUser || !confirm("모든 기록을 삭제하시겠습니까?")) return;
         await fetch(`/api/chat/history?email=${encodeURIComponent(currentUser.email)}`, { method: 'DELETE' });
@@ -402,7 +418,19 @@
             google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredentialResponse, auto_select: false });
         }
         refreshIcons();
+
+        try {
+            const savedUser = localStorage.getItem('chatUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+            }
+        } catch (e) {
+            console.warn("로컬 스토리지 복구 실패", e);
+        }
+
+        // 화면 켜질 때 여기서 딱 한 번 갱신됩니다!
         renderHeader();
+
         messages = [{
             id: 'welcome', sender: 'bot', text: '안녕하세요! 대학 생활과 관련하여 궁금한 사안이 있다면 언제든 말씀해 주세요.',
             timestamp: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
