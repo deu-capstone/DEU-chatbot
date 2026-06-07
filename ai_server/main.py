@@ -226,7 +226,7 @@ async def get_recommendations(request: RecommendRequest):
     query = ""
     # 1. 프롬프트 엔지니어링: AI가 문맥을 더 잘 찾도록 질문을 예쁘게 포장합니다.
     if request.department:
-        query = f"{request.department} 학과 대학생에게 유용한 장학금, 취업, 학사일정, 특강 관련 공지사항"
+        query = f"{request.department} 대학생에게 유용한 공지사항"
     elif request.history:
         history_str = " ".join(request.history)
         query = f"다음 키워드와 관련된 유용한 공지사항: {history_str}"
