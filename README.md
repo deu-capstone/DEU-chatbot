@@ -34,4 +34,19 @@
   #### 4. 업데이트 파이프라인
   - run_pipeline.py 스크립트를 통해 [최신 글 크롤링 -> 이미지 파싱 -> 벡터 DB 업데이트 API 호출]을 한 번에 처리
 
-  
+## 설치 및 실행 방법
+0. 사전 요구사항
+   - DB 환경: MongoDB 로컬 또는 클러스터 서버 구동
+   - 외부 프로그램 설치(필수)
+     - Tersseract-OCR: C:\Program Files\Tesseract-OCR\tesseract.exe 경로에 설치
+   - AI 서버 폴더로 이동하여 필수 라이브러리 설치: pip install -r requirements.txt 입력
+1. 환경 변수 설정
+   - ai 서버: ai_server/.env 파일을 생성하고 키 입력 (예시: OPENAI_API_KEY=your-openai-api-key-here)
+   - 메인 서버(Spring Boot): main_server\src\main\resources\application.properties 파일을 생성하고 MongoDB 접속 URI 입력 (예시: spring.mongodb.uri=your-mongodb-uri-here)
+   - OAuth 2.0 클라이언트 ID를 발급받아 index.html 파일의 GOOGLE_CLIENT_ID 값을 본인의 클라이언트 ID로 교체
+2. 초기 데이터베이스 구축
+   1. deu_notice_crawler_history.py 실행 (2026년 2월 이후 과거 데이터 최초 크롤링)
+   2. attachment_parser.py 실행 (다운로드된 본문 이미지의 텍스트 추출(OCR))
+3. 서버 실행
+   1. AI 서버 실행: 터미널에서 ai_server로 이동 후 uvicorn main:app --reload 입력하여 실행
+   2. 메인 웹 서버 실행(Spring Boot): MainServerApplication.java를 실행
